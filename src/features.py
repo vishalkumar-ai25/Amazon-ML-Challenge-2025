@@ -125,6 +125,58 @@ def extract_pack_quantity(text: object) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Brand extraction and text parsing helpers
+# ---------------------------------------------------------------------------
+
+_ARTICLES = {"la", "le", "el", "the", "de", "del", "san", "santa", "st", "st.", "dr", "dr.", "mr", "mr.", "mrs", "mrs."}
+
+
+def extract_brand(item_name: object) -> str:
+    """Extract approximate brand name from item title.
+
+    Amazon titles typically put the brand name as the first 1-2 words.
+    """
+    if not isinstance(item_name, str) or not item_name.strip():
+        return ""
+    clean = re.sub(r"^[^\w\s]+", "", item_name.strip())
+    first_chunk = re.split(r"\s+[-–—|/]\s+|,", clean)[0].strip()
+    tokens = first_chunk.split()
+    if not tokens:
+        return ""
+    if len(tokens) >= 2 and tokens[0].lower() in _ARTICLES:
+        return f"{tokens[0]} {tokens[1]}"
+    if len(tokens) >= 2 and (tokens[1].startswith("&") or tokens[1].startswith("+") or "+" in tokens[1] or "&" in tokens[1]):
+        if len(tokens) >= 3 and tokens[1] in ["&", "+"]:
+            return f"{tokens[0]} {tokens[1]} {tokens[2]}"
+        return f"{tokens[0]} {tokens[1]}"
+    return tokens[0]
+
+
+_UNIT_CATEGORIES = {
+    "fl_oz": "volume",
+    "ml": "volume",
+    "l": "volume",
+    "oz": "weight",
+    "lb": "weight",
+    "g": "weight",
+    "kg": "weight",
+    "count": "count",
+}
+
+
+def get_unit_category(unit: str) -> str:
+    """Classify normalized unit into broader physical category."""
+    return _UNIT_CATEGORIES.get(str(unit).lower().strip(), "other")
+
+
+def count_bullet_points(text: object) -> int:
+    """Count number of bullet point entries in catalog text."""
+    if not isinstance(text, str):
+        return 0
+    return len(re.findall(r"^Bullet Point \d+:", text, re.MULTILINE))
+
+
+# ---------------------------------------------------------------------------
 # Structured feature extraction
 # ---------------------------------------------------------------------------
 
@@ -135,9 +187,7 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with 'catalog_content' column.
 
     Returns:
-        DataFrame with added columns: item_name, value_num, unit_normalized,
-        pack_qty, log_value, log_pack_qty, unit_size, log_unit_size,
-        name_len, content_len.
+        DataFrame with structured columns and numeric indicators.
     """
     result = df.copy()
 
@@ -151,9 +201,16 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
     result["unit_raw"] = result["catalog_content"].apply(
         lambda x: extract_field(x, "Unit")
     )
+    result["description_raw"] = result["catalog_content"].apply(
+        lambda x: extract_field(x, "Product Description")
+    )
 
-    # Normalize unit
+    # Normalize unit and classify
     result["unit_normalized"] = result["unit_raw"].apply(normalize_unit)
+    result["unit_category"] = result["unit_normalized"].apply(get_unit_category)
+
+    # Brand extraction
+    result["brand"] = result["item_name"].apply(extract_brand)
 
     # Numeric value (from Value field)
     result["value_num"] = pd.to_numeric(result["value_raw"], errors="coerce").fillna(1.0)
@@ -170,9 +227,17 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
     result["total_quantity"] = result["value_num"] * result["pack_qty"]
     result["log_total_quantity"] = np.log1p(result["total_quantity"])
 
-    # Text length features
-    result["name_len"] = result["item_name"].str.len()
-    result["content_len"] = result["catalog_content"].str.len()
+    # Bullet points and text length statistics
+    result["num_bullets"] = result["catalog_content"].apply(count_bullet_points)
+    result["name_len"] = result["item_name"].str.len().fillna(0)
+    result["content_len"] = result["catalog_content"].str.len().fillna(0)
+    result["desc_len"] = result["description_raw"].str.len().fillna(0)
+
+    # Pricing keyword indicators
+    content_lower = result["catalog_content"].str.lower()
+    result["is_multipack"] = content_lower.str.contains(r"\b(?:pack|set|case|box|bundle)\b", regex=True).astype(float)
+    result["is_premium"] = content_lower.str.contains(r"\b(?:organic|gourmet|pro|premium|luxury|collection)\b", regex=True).astype(float)
+    result["is_value_size"] = content_lower.str.contains(r"\b(?:refill|travel|mini|sample)\b", regex=True).astype(float)
 
     return result
 
@@ -229,6 +294,11 @@ NUMERIC_COLS = [
     "log_total_quantity",
     "name_len",
     "content_len",
+    "desc_len",
+    "num_bullets",
+    "is_multipack",
+    "is_premium",
+    "is_value_size",
 ]
 
 

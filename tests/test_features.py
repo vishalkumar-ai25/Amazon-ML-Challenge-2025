@@ -201,3 +201,39 @@ class TestStructuredFeatures:
         from src.features import extract_structured_features
         result = extract_structured_features(sample_df)
         assert (result["pack_qty"] >= 1.0).all()
+
+
+class TestAdvancedFeatures:
+
+    @pytest.mark.parametrize("item_name,expected_brand", [
+        ("La Victoria Green Taco Sauce Mild, 12 Ounce", "La Victoria"),
+        ("Apple AirPods Pro (2nd Generation)", "Apple"),
+        ("Dove Men+Care Body Wash Clean Comfort 18 oz", "Dove Men+Care"),
+        ("Bounty Quick-Size Paper Towels", "Bounty"),
+    ])
+    def test_extract_brand(self, item_name, expected_brand):
+        from src.features import extract_brand
+        assert extract_brand(item_name) == expected_brand
+
+    @pytest.mark.parametrize("unit,expected_category", [
+        ("fl_oz", "volume"),
+        ("ml", "volume"),
+        ("l", "volume"),
+        ("oz", "weight"),
+        ("lb", "weight"),
+        ("g", "weight"),
+        ("kg", "weight"),
+        ("count", "count"),
+        ("unknown_unit", "other"),
+    ])
+    def test_get_unit_category(self, unit, expected_category):
+        from src.features import get_unit_category
+        assert get_unit_category(unit) == expected_category
+
+    def test_count_bullet_points(self):
+        from src.features import count_bullet_points
+        text_3_bullets = "Bullet Point 1: A\nBullet Point 2: B\nBullet Point 3: C"
+        assert count_bullet_points(text_3_bullets) == 3
+
+        text_no_bullets = "Item Name: Something\nValue: 10\nUnit: Count"
+        assert count_bullet_points(text_no_bullets) == 0
