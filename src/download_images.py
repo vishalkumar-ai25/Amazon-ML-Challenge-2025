@@ -11,20 +11,16 @@ from __future__ import annotations
 
 import argparse
 import os
-import ssl
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Sequence
+from urllib.parse import urlparse
 
 import pandas as pd
+import requests
 from tqdm import tqdm
 
-try:
-    import certifi
-    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
-except Exception:
-    SSL_CONTEXT = ssl._create_unverified_context()
+PERMITTED_SCHEMES = {"http", "https"}
 
 HEADERS = {
     "User-Agent": (
@@ -34,23 +30,38 @@ HEADERS = {
 }
 
 
+def is_permitted_url(url: object) -> bool:
+    """Validate that the URL scheme is strictly http or https.
+    
+    Rejects file:, ftp:, custom schemes, or malformed inputs to prevent SSRF
+    and local file inclusion vulnerabilities.
+    """
+    if not isinstance(url, str) or not url.strip():
+        return False
+    try:
+        parsed = urlparse(url.strip())
+        return parsed.scheme in PERMITTED_SCHEMES and bool(parsed.netloc)
+    except Exception:
+        return False
+
+
 def download_single_image(
     image_url: str,
     save_path: str,
     *,
     timeout: int = 10,
 ) -> bool:
-    """Download a single image file with timeout and resume check.
+    """Download a single image file using requests with scheme auditing.
 
     Args:
-        image_url: URL to download from.
+        image_url: URL to download from (must be http/https).
         save_path: Destination file path.
         timeout: Socket timeout in seconds.
 
     Returns:
         True if successfully downloaded or already exists, False on error.
     """
-    if not isinstance(image_url, str) or not image_url.startswith("http"):
+    if not is_permitted_url(image_url):
         return False
 
     # Check if valid file already exists (> 1KB)
@@ -59,12 +70,12 @@ def download_single_image(
 
     temp_path = f"{save_path}.tmp"
     try:
-        req = urllib.request.Request(image_url, headers=HEADERS)
-        with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as response:
-            data = response.read()
-            if len(data) > 0:
+        with requests.get(image_url, headers=HEADERS, timeout=timeout, stream=True) as response:
+            if response.status_code == 200:
                 with open(temp_path, "wb") as f:
-                    f.write(data)
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
                 os.replace(temp_path, save_path)
                 return True
     except Exception:
