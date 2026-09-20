@@ -1,0 +1,178 @@
+======================================================================
+  Amazon ML Challenge 2025: RTX A4000 GPU & Multi-Core Pipeline
+======================================================================
+Loading train data from: /home/24je093024je0930/Amazon-Ml-Prep/dataset/train.csv
+Loading test data from: /home/24je093024je0930/Amazon-Ml-Prep/dataset/test.csv
+Train samples: 75000, Test samples: 75000
+
+[1/5] Extracting structured features & regex fields...
+Structured extraction completed in 21.9s
+
+[2/5] Building high-capacity 35,000-term TF-IDF matrix...
+TF-IDF completed in 38.7s. Feature matrix shape: (75000, 35013)
+
+[3/5] CatBoost GPU acceleration verified and active on RTX A4000!
+
+[4/5] Starting 5-Fold Cross-Validation...
+
+==================== Fold 1/5 ====================
+  [Ridge]    Fold 1 SMAPE: 68.67% (0.8s)
+[100]	valid_0's l1: 0.58317
+[200]	valid_0's l1: 0.562993
+[300]	valid_0's l1: 0.556328
+[400]	valid_0's l1: 0.55354
+[500]	valid_0's l1: 0.551189
+[600]	valid_0's l1: 0.550727
+[700]	valid_0's l1: 0.550121
+[800]	valid_0's l1: 0.549321
+/home/24je093024je0930/Amazon-Ml-Prep/venv/lib64/python3.9/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names
+  warnings.warn(
+  [LightGBM] Fold 1 SMAPE: 49.89% (647.8s, best iter: 800)
+Default metric period is 5 because MAE is/are not implemented for GPU
+0:	learn: 0.8267571	test: 0.8385247	best: 0.8385247 (0)	total: 200ms	remaining: 5m
+200:	learn: 0.6311286	test: 0.6561427	best: 0.6561427 (200)	total: 30.5s	remaining: 3m 17s
+400:	learn: 0.5993366	test: 0.6302611	best: 0.6302611 (400)	total: 59.2s	remaining: 2m 42s
+600:	learn: 0.5807611	test: 0.6171835	best: 0.6171835 (600)	total: 1m 27s	remaining: 2m 10s
+800:	learn: 0.5665300	test: 0.6082090	best: 0.6082090 (800)	total: 1m 55s	remaining: 1m 40s
+1000:	learn: 0.5551622	test: 0.6014393	best: 0.6014393 (1000)	total: 2m 22s	remaining: 1m 11s
+1200:	learn: 0.5455118	test: 0.5963298	best: 0.5963298 (1200)	total: 2m 50s	remaining: 42.5s
+1400:	learn: 0.5368045	test: 0.5916408	best: 0.5916408 (1400)	total: 3m 18s	remaining: 14s
+1499:	learn: 0.5329478	test: 0.5895976	best: 0.5895976 (1499)	total: 3m 31s	remaining: 0us
+bestTest = 0.5895975911
+bestIteration = 1499
+  [CatBoost] Fold 1 SMAPE: 53.19% (304.1s)
+Fold 1 completed in 952.7s
+
+==================== Fold 2/5 ====================
+  [Ridge]    Fold 2 SMAPE: 67.89% (0.6s)
+[100]	valid_0's l1: 0.56612
+[200]	valid_0's l1: 0.545514
+[300]	valid_0's l1: 0.539965
+[400]	valid_0's l1: 0.537477
+[500]	valid_0's l1: 0.536302
+[600]	valid_0's l1: 0.536407
+/home/24je093024je0930/Amazon-Ml-Prep/venv/lib64/python3.9/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names
+  warnings.warn(
+  [LightGBM] Fold 2 SMAPE: 48.90% (537.2s, best iter: 525)
+Default metric period is 5 because MAE is/are not implemented for GPU
+0:	learn: 0.8291532	test: 0.8287031	best: 0.8287031 (0)	total: 183ms	remaining: 4m 34s
+200:	learn: 0.6354048	test: 0.6393225	best: 0.6393225 (200)	total: 30.7s	remaining: 3m 18s
+400:	learn: 0.6037937	test: 0.6120986	best: 0.6120986 (400)	total: 59.2s	remaining: 2m 42s
+600:	learn: 0.5854432	test: 0.5985868	best: 0.5985868 (600)	total: 1m 27s	remaining: 2m 10s
+800:	learn: 0.5712008	test: 0.5890081	best: 0.5890081 (800)	total: 1m 55s	remaining: 1m 40s
+1000:	learn: 0.5592402	test: 0.5820822	best: 0.5820822 (1000)	total: 2m 22s	remaining: 1m 11s
+1200:	learn: 0.5493995	test: 0.5766167	best: 0.5766167 (1200)	total: 2m 50s	remaining: 42.4s
+1400:	learn: 0.5406103	test: 0.5722025	best: 0.5722025 (1400)	total: 3m 18s	remaining: 14s
+1499:	learn: 0.5367961	test: 0.5702705	best: 0.5702705 (1499)	total: 3m 31s	remaining: 0us
+bestTest = 0.5702705078
+bestIteration = 1499
+  [CatBoost] Fold 2 SMAPE: 51.72% (325.8s)
+Fold 2 completed in 863.5s
+
+==================== Fold 3/5 ====================
+  [Ridge]    Fold 3 SMAPE: 68.05% (0.6s)
+[100]	valid_0's l1: 0.570809
+[200]	valid_0's l1: 0.550593
+[300]	valid_0's l1: 0.545125
+[400]	valid_0's l1: 0.542579
+[500]	valid_0's l1: 0.54116
+[600]	valid_0's l1: 0.540465
+[700]	valid_0's l1: 0.540414
+/home/24je093024je0930/Amazon-Ml-Prep/venv/lib64/python3.9/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names
+  warnings.warn(
+  [LightGBM] Fold 3 SMAPE: 49.31% (719.5s, best iter: 632)
+Default metric period is 5 because MAE is/are not implemented for GPU
+0:	learn: 0.8289016	test: 0.8283118	best: 0.8283118 (0)	total: 210ms	remaining: 5m 14s
+200:	learn: 0.6343707	test: 0.6416927	best: 0.6416927 (200)	total: 30.8s	remaining: 3m 18s
+400:	learn: 0.6022952	test: 0.6157814	best: 0.6157814 (400)	total: 59.2s	remaining: 2m 42s
+600:	learn: 0.5835924	test: 0.6028054	best: 0.6028054 (600)	total: 1m 27s	remaining: 2m 10s
+800:	learn: 0.5701103	test: 0.5944987	best: 0.5944987 (800)	total: 1m 54s	remaining: 1m 40s
+1000:	learn: 0.5586260	test: 0.5878549	best: 0.5878549 (1000)	total: 2m 22s	remaining: 1m 11s
+1200:	learn: 0.5486613	test: 0.5822814	best: 0.5822814 (1200)	total: 2m 49s	remaining: 42.3s
+1400:	learn: 0.5399312	test: 0.5779445	best: 0.5779445 (1400)	total: 3m 17s	remaining: 13.9s
+1499:	learn: 0.5359304	test: 0.5760850	best: 0.5760850 (1499)	total: 3m 30s	remaining: 0us
+bestTest = 0.5760849609
+bestIteration = 1499
+  [CatBoost] Fold 3 SMAPE: 52.32% (322.6s)
+Fold 3 completed in 1042.8s
+
+==================== Fold 4/5 ====================
+  [Ridge]    Fold 4 SMAPE: 67.02% (0.7s)
+[100]	valid_0's l1: 0.558368
+[200]	valid_0's l1: 0.54018
+[300]	valid_0's l1: 0.534585
+[400]	valid_0's l1: 0.532447
+[500]	valid_0's l1: 0.531081
+[600]	valid_0's l1: 0.530773
+[700]	valid_0's l1: 0.530928
+/home/24je093024je0930/Amazon-Ml-Prep/venv/lib64/python3.9/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names
+  warnings.warn(
+  [LightGBM] Fold 4 SMAPE: 48.46% (738.6s, best iter: 660)
+Default metric period is 5 because MAE is/are not implemented for GPU
+0:	learn: 0.8316564	test: 0.8195830	best: 0.8195830 (0)	total: 217ms	remaining: 5m 24s
+200:	learn: 0.6377973	test: 0.6269000	best: 0.6269000 (200)	total: 30.8s	remaining: 3m 19s
+400:	learn: 0.6053087	test: 0.6001426	best: 0.6001426 (400)	total: 59.3s	remaining: 2m 42s
+600:	learn: 0.5867793	test: 0.5870645	best: 0.5870645 (600)	total: 1m 27s	remaining: 2m 10s
+800:	learn: 0.5726656	test: 0.5788207	best: 0.5788207 (800)	total: 1m 55s	remaining: 1m 40s
+1000:	learn: 0.5613663	test: 0.5725781	best: 0.5725781 (1000)	total: 2m 22s	remaining: 1m 11s
+1200:	learn: 0.5512199	test: 0.5673214	best: 0.5673214 (1200)	total: 2m 50s	remaining: 42.5s
+1400:	learn: 0.5422031	test: 0.5630765	best: 0.5630765 (1400)	total: 3m 18s	remaining: 14s
+1499:	learn: 0.5383738	test: 0.5613998	best: 0.5613998 (1499)	total: 3m 31s	remaining: 0us
+bestTest = 0.5613998047
+bestIteration = 1499
+  [CatBoost] Fold 4 SMAPE: 51.08% (319.6s)
+Fold 4 completed in 1059.0s
+
+==================== Fold 5/5 ====================
+  [Ridge]    Fold 5 SMAPE: 67.97% (0.6s)
+[100]	valid_0's l1: 0.569333
+[200]	valid_0's l1: 0.549578
+[300]	valid_0's l1: 0.544728
+[400]	valid_0's l1: 0.542957
+[500]	valid_0's l1: 0.54235
+[600]	valid_0's l1: 0.542375
+/home/24je093024je0930/Amazon-Ml-Prep/venv/lib64/python3.9/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names
+  warnings.warn(
+  [LightGBM] Fold 5 SMAPE: 49.34% (513.7s, best iter: 550)
+Default metric period is 5 because MAE is/are not implemented for GPU
+0:	learn: 0.8287738	test: 0.8306029	best: 0.8306029 (0)	total: 200ms	remaining: 5m
+200:	learn: 0.6349986	test: 0.6421320	best: 0.6421320 (200)	total: 34.7s	remaining: 3m 43s
+400:	learn: 0.6031586	test: 0.6157442	best: 0.6157442 (400)	total: 1m 6s	remaining: 3m 3s
+600:	learn: 0.5842318	test: 0.6018483	best: 0.6018483 (600)	total: 1m 39s	remaining: 2m 28s
+800:	learn: 0.5704029	test: 0.5929008	best: 0.5929008 (800)	total: 2m 11s	remaining: 1m 54s
+1000:	learn: 0.5589954	test: 0.5861059	best: 0.5861059 (1000)	total: 2m 43s	remaining: 1m 21s
+1200:	learn: 0.5487411	test: 0.5807258	best: 0.5807258 (1200)	total: 3m 14s	remaining: 48.5s
+1400:	learn: 0.5397081	test: 0.5764442	best: 0.5764442 (1400)	total: 3m 46s	remaining: 16s
+1499:	learn: 0.5357254	test: 0.5745805	best: 0.5745805 (1499)	total: 4m 2s	remaining: 0us
+bestTest = 0.5745804688
+bestIteration = 1499
+  [CatBoost] Fold 5 SMAPE: 52.05% (361.8s)
+Fold 5 completed in 876.1s
+
+======================================================================
+Total CV Execution Time: 4794.1s
+Overall OOF Ridge SMAPE:    67.92%
+Overall OOF LightGBM SMAPE: 49.18%
+Overall OOF CatBoost SMAPE: 52.07%
+
+[5/5] Optimizing ensemble weights via Nelder-Mead on SMAPE...
+Optimal Ensemble Weights: {'ridge': 0.0, 'lgbm': 0.894014620418013, 'cat': 0.10598537958198688}
+
+=======================================================
+  >>> FINAL BLENDED ENSEMBLE OOF SMAPE: 49.13% <<<
+=======================================================
+
+Successfully generated and validated /home/24je093024je0930/Amazon-Ml-Prep/dataset/test_out.csv (75000 rows)!
+
+Sample predictions:
+   sample_id      price
+0     100179  13.305239
+1     245611  20.409528
+2     146263  17.553066
+3      95658  10.783025
+4      36806  39.987437
+5     148239   3.955364
+6      92659   8.963043
+7       3780  14.919656
+8     196940   9.313509
+9      20472   5.975725

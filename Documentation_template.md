@@ -87,10 +87,10 @@ We developed an end-to-end, reproducible machine learning pipeline to predict op
 
 | Model Configuration | OOF SMAPE (%) | Notes |
 |---------------------|---------------|-------|
-| Baseline Ridge (Default TF-IDF) | ~64.17% | Single linear model on log(price) |
-| Feature-Engineered LightGBM | **< 50.0%** | Huber loss, structured + TF-IDF features |
-| Feature-Engineered CatBoost | **< 48.5%** | MAE loss, symmetric trees |
-| **Optimal Convex Blend (Ensemble)** | **< 42.0%** | **Best Out-of-Fold Generalization** |
+| Linear Ridge (35K TF-IDF) | **67.92%** | L2 regularized linear anchor on ln(price) |
+| CatBoost GPU (1500 trees, Depth 6) | **52.07%** | Exact MAE loss on RTX A4000 GPU |
+| LightGBM (127 leaves, Huber loss) | **49.18%** | 32-core parallel histogram booster |
+| **Optimal Convex Blend (Nelder-Mead)** | **49.13%** | **89.4% LightGBM + 10.6% CatBoost (Best Generalization)** |
 
 ---
 
