@@ -1,169 +1,34 @@
-"""Self-contained Kaggle Pipeline for Amazon ML Challenge 2025.
+"""Kaggle-optimized training pipeline for Amazon ML Challenge 2025.
 
-Optimized for Kaggle Kernels (30 GB CPU RAM / T4/P100 GPU).
 Executes:
-1. Resilient dataset discovery (Kaggle inputs vs local directory)
-2. High-capacity text vectorization (25,000 n-grams) + structured catalog parsing
+1. Dynamic dataset discovery (Kaggle inputs vs local directory)
+2. High-capacity text vectorization + structured catalog parsing via src.features
 3. Dual Gradient Boosting (LightGBM + CatBoost) + Ridge Regression with 5-fold CV
-4. Optimal convex blending directly minimizing competition SMAPE
+4. Metric-driven convex blending via src.ensemble minimizing SMAPE
 5. Generates and strictly validates final test_out.csv
 """
 import os
-import re
 import time
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
-from scipy.sparse import csr_matrix, hstack
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import KFold
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
-# ---------------------------------------------------------------------------
-# Evaluation Metric (Competition Exact SMAPE)
-# ---------------------------------------------------------------------------
+from src.metrics import smape
+from src.features import (
+    extract_structured_features,
+    extract_text_features,
+    build_numeric_matrix,
+    build_feature_matrix,
+    NUMERIC_COLS,
+)
+from src.ensemble import find_optimal_blend_weights, apply_blend
 
-def smape(y_true, y_pred, clip_min=1e-5):
-    y_true = np.clip(np.asarray(y_true, dtype=np.float64), clip_min, None)
-    y_pred = np.clip(np.asarray(y_pred, dtype=np.float64), clip_min, None)
-    numerator = np.abs(y_pred - y_true)
-    denominator = (np.abs(y_true) + np.abs(y_pred)) / 2.0
-    return float(np.mean(numerator / denominator) * 100.0)
 
-# ---------------------------------------------------------------------------
-# Feature Extraction
-# ---------------------------------------------------------------------------
-
-_UNIT_MAP = {
-    "fl oz": "fl_oz", "fl. oz": "fl_oz", "fluid ounce": "fl_oz", "fl_oz": "fl_oz",
-    "ounce": "oz", "ounces": "oz", "oz": "oz",
-    "pound": "lb", "pounds": "lb", "lb": "lb", "lbs": "lb",
-    "gram": "g", "grams": "g", "g": "g",
-    "kilogram": "kg", "kg": "kg",
-    "milliliter": "ml", "ml": "ml", "liter": "l", "l": "l",
-    "count": "count", "each": "count", "piece": "count", "unit": "count",
-}
-
-_UNIT_CATEGORIES = {
-    "fl_oz": "volume", "ml": "volume", "l": "volume",
-    "oz": "weight", "lb": "weight", "g": "weight", "kg": "weight",
-    "count": "count",
-}
-
-_ARTICLES = {"la", "le", "el", "the", "de", "del", "san", "santa", "st", "st.", "dr", "dr.", "mr", "mr.", "mrs", "mrs."}
-_PACK_PATTERNS = [
-    re.compile(r"(?:pack|case|box|set)\s+of\s+(\d+)", re.IGNORECASE),
-    re.compile(r"(\d+)\s*(?:pack|pk|count|ct|per\s+case|boxes?)", re.IGNORECASE),
-]
-
-def extract_field(text, field):
-    if not isinstance(text, str):
-        return ""
-    m = re.search(rf"^{re.escape(field)}:\s*(.*)$", text, re.MULTILINE)
-    return m.group(1).strip() if m else ""
-
-def normalize_unit(raw):
-    lower = str(raw).strip().lower()
-    return _UNIT_MAP.get(lower, lower)
-
-def get_unit_category(unit):
-    return _UNIT_CATEGORIES.get(str(unit).lower().strip(), "other")
-
-def extract_brand(item_name):
-    if not isinstance(item_name, str) or not item_name.strip():
-        return ""
-    clean = re.sub(r"^[^\w\s]+", "", item_name.strip())
-    first_chunk = re.split(r"\s+[-–—|/]\s+|,", clean)[0].strip()
-    tokens = first_chunk.split()
-    if not tokens:
-        return ""
-    if len(tokens) >= 2 and tokens[0].lower() in _ARTICLES:
-        return f"{tokens[0]} {tokens[1]}"
-    if len(tokens) >= 2 and (tokens[1].startswith("&") or tokens[1].startswith("+") or "+" in tokens[1] or "&" in tokens[1]):
-        if len(tokens) >= 3 and tokens[1] in ["&", "+"]:
-            return f"{tokens[0]} {tokens[1]} {tokens[2]}"
-        return f"{tokens[0]} {tokens[1]}"
-    return tokens[0]
-
-def extract_pack_quantity(text):
-    text_str = str(text) if not isinstance(text, str) else text
-    for p in _PACK_PATTERNS:
-        m = p.search(text_str)
-        if m:
-            return float(m.group(1))
-    return 1.0
-
-def count_bullets(text):
-    if not isinstance(text, str):
-        return 0
-    return len(re.findall(r"^Bullet Point \d+:", text, re.MULTILINE))
-
-def extract_all_structured(df):
-    res = df.copy()
-    res["item_name"] = res["catalog_content"].apply(lambda x: extract_field(x, "Item Name"))
-    res["value_raw"] = res["catalog_content"].apply(lambda x: extract_field(x, "Value"))
-    res["unit_raw"] = res["catalog_content"].apply(lambda x: extract_field(x, "Unit"))
-    res["desc_raw"] = res["catalog_content"].apply(lambda x: extract_field(x, "Product Description"))
-
-    res["unit_norm"] = res["unit_raw"].apply(normalize_unit)
-    res["unit_cat"] = res["unit_norm"].apply(get_unit_category)
-    res["brand"] = res["item_name"].apply(extract_brand)
-
-    res["val_num"] = pd.to_numeric(res["value_raw"], errors="coerce").fillna(1.0).clip(0.01, 10000.0)
-    res["pack_qty"] = res["catalog_content"].apply(extract_pack_quantity)
-
-    res["log_val"] = np.log1p(res["val_num"])
-    res["log_pack"] = np.log1p(res["pack_qty"])
-    res["unit_size"] = res["val_num"] / np.maximum(res["pack_qty"], 1.0)
-    res["log_unit_size"] = np.log1p(res["unit_size"])
-    res["total_qty"] = res["val_num"] * res["pack_qty"]
-    res["log_total_qty"] = np.log1p(res["total_qty"])
-
-    res["num_bullets"] = res["catalog_content"].apply(count_bullets)
-    res["name_len"] = res["item_name"].str.len().fillna(0)
-    res["content_len"] = res["catalog_content"].str.len().fillna(0)
-    res["desc_len"] = res["desc_raw"].str.len().fillna(0)
-
-    lower = res["catalog_content"].str.lower()
-    res["is_multipack"] = lower.str.contains(r"\b(?:pack|set|case|box|bundle)\b", regex=True).astype(float)
-    res["is_premium"] = lower.str.contains(r"\b(?:organic|gourmet|pro|premium|luxury|collection)\b", regex=True).astype(float)
-    res["is_value_size"] = lower.str.contains(r"\b(?:refill|travel|mini|sample)\b", regex=True).astype(float)
-
-    return res
-
-# ---------------------------------------------------------------------------
-# Ensembling & Blending
-# ---------------------------------------------------------------------------
-
-def optimize_blend_weights(oof_dict, y_true):
-    names = list(oof_dict.keys())
-    if len(names) == 1:
-        return {names[0]: 1.0}
-    P = np.column_stack([oof_dict[n] for n in names])
-
-    def obj(w):
-        w_norm = np.maximum(w, 0)
-        s = np.sum(w_norm)
-        w_norm = w_norm / s if s > 0 else np.ones(len(names)) / len(names)
-        return smape(y_true, np.dot(P, w_norm))
-
-    res = minimize(obj, np.ones(len(names)) / len(names), method="Nelder-Mead", bounds=[(0.0, 1.0)] * len(names))
-    w_opt = np.maximum(res.x, 0)
-    w_opt = w_opt / np.sum(w_opt) if np.sum(w_opt) > 0 else np.ones(len(names)) / len(names)
-    return {name: float(w_opt[i]) for i, name in enumerate(names)}
-
-# ---------------------------------------------------------------------------
-# Main Kaggle Pipeline
-# ---------------------------------------------------------------------------
-
-def main():
-    print("=" * 60)
-    print(" Amazon ML Challenge 2025: Production Model Pipeline")
-    print("=" * 60)
-
-    # Dynamically locate datasets across Kaggle and local environments
+def locate_dataset_paths() -> tuple[str, str, str]:
+    """Locate train.csv and test.csv dynamically across Kaggle and local environments."""
     train_path, test_path = None, None
     search_bases = ["/kaggle/input", ".", "dataset"]
 
@@ -194,6 +59,16 @@ def main():
             f"Could not locate train.csv and test.csv. Found train: {train_path}, test: {test_path}"
         )
 
+    return train_path, test_path, out_path
+
+
+def main():
+    print("=" * 60)
+    print(" Amazon ML Challenge 2025: Production Model Pipeline")
+    print("=" * 60)
+
+    train_path, test_path, out_path = locate_dataset_paths()
+
     print(f"Loading train data: {train_path}")
     train_df = pd.read_csv(train_path)
     print(f"Loading test data: {test_path}")
@@ -202,37 +77,38 @@ def main():
 
     # Extract structured features
     print("\nExtracting structured features...")
-    train_struct = extract_all_structured(train_df)
-    test_struct = extract_all_structured(test_df)
+    train_struct = extract_structured_features(train_df)
+    test_struct = extract_structured_features(test_df)
 
     # Unit frequency
-    u_freq = train_struct["unit_norm"].value_counts().to_dict()
-    train_struct["unit_freq"] = train_struct["unit_norm"].map(u_freq).fillna(0)
-    test_struct["unit_freq"] = test_struct["unit_norm"].map(u_freq).fillna(0)
+    u_freq = train_struct["unit_normalized"].value_counts().to_dict()
+    train_struct["unit_freq"] = train_struct["unit_normalized"].map(u_freq).fillna(0)
+    test_struct["unit_freq"] = test_struct["unit_normalized"].map(u_freq).fillna(0)
 
     # Brand frequency
     b_freq = train_struct["brand"].value_counts().to_dict()
     train_struct["brand_freq"] = train_struct["brand"].map(b_freq).fillna(0)
     test_struct["brand_freq"] = test_struct["brand"].map(b_freq).fillna(0)
 
-    num_cols = [
-        "log_val", "log_pack", "log_unit_size", "log_total_qty",
-        "name_len", "content_len", "desc_len", "num_bullets",
-        "is_multipack", "is_premium", "is_value_size",
-        "unit_freq", "brand_freq"
-    ]
-
-    X_num_train = csr_matrix(train_struct[num_cols].fillna(0).values.astype(np.float32))
-    X_num_test = csr_matrix(test_struct[num_cols].fillna(0).values.astype(np.float32))
+    num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"]
+    X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
+    X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
 
     # TF-IDF text features
     print("Fitting TF-IDF Vectorizer on full catalog content...")
-    tfidf = TfidfVectorizer(max_features=25000, ngram_range=(1, 2), min_df=3, stop_words="english", dtype=np.float32)
-    X_text_train = tfidf.fit_transform(train_struct["catalog_content"])
-    X_text_test = tfidf.transform(test_struct["catalog_content"])
+    X_text_train, tfidf = extract_text_features(
+        train_struct["catalog_content"],
+        max_features=25000,
+        ngram_range=(1, 2),
+        min_df=3,
+    )
+    X_text_test, _ = extract_text_features(
+        test_struct["catalog_content"],
+        vectorizer=tfidf,
+    )
 
-    X_train = hstack([X_text_train, X_num_train]).tocsr()
-    X_test = hstack([X_text_test, X_num_test]).tocsr()
+    X_train = build_feature_matrix(X_text_train, X_num_train)
+    X_test = build_feature_matrix(X_text_test, X_num_test)
     print(f"Combined features shape: {X_train.shape}")
 
     y_train = train_df["price"].values
@@ -322,17 +198,17 @@ def main():
 
     # Optimal Convex Blending
     oof_dict = {"ridge": oof_ridge, "lgbm": oof_lgbm, "cat": oof_cat}
-    weights = optimize_blend_weights(oof_dict, y_train)
+    weights = find_optimal_blend_weights(oof_dict, y_train)
     print(f"\nOptimal Ensemble Weights: {weights}")
 
-    blended_oof = weights["ridge"] * oof_ridge + weights["lgbm"] * oof_lgbm + weights["cat"] * oof_cat
+    blended_oof = apply_blend(oof_dict, weights)
     final_smape = smape(y_train, blended_oof)
     print(f"FINAL ENSEMBLE OOF SMAPE:   {final_smape:.2f}%")
     print("=" * 60)
 
     # Generate Final Predictions
-    blended_test = weights["ridge"] * test_ridge + weights["lgbm"] * test_lgbm + weights["cat"] * test_cat
-    blended_test = np.maximum(blended_test, 0.05)
+    test_dict = {"ridge": test_ridge, "lgbm": test_lgbm, "cat": test_cat}
+    blended_test = apply_blend(test_dict, weights, clip_min=0.05)
 
     sub_df = pd.DataFrame({
         "sample_id": test_df["sample_id"],
