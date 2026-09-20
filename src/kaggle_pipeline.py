@@ -264,13 +264,13 @@ def main():
         test_ridge += np.maximum(np.exp(m_ridge.predict(X_test)), 0.01) / n_folds
         print(f"  Fold {fold+1} Ridge SMAPE: {smape(y_va_true, val_pred_ridge):.2f}%")
 
-        # 2. LightGBM (Huber loss)
+        # 2. LightGBM (Huber loss with live progress logs)
         m_lgbm = lgb.LGBMRegressor(
             objective="huber",
             metric="mae",
-            n_estimators=1500,
-            learning_rate=0.06,
-            num_leaves=127,
+            n_estimators=800,
+            learning_rate=0.08,
+            num_leaves=63,
             min_child_samples=50,
             feature_fraction=0.75,
             bagging_fraction=0.8,
@@ -284,33 +284,36 @@ def main():
         m_lgbm.fit(
             X_tr, y_tr_log,
             eval_set=[(X_va, y_va_log)],
-            callbacks=[lgb.early_stopping(100, verbose=False)],
+            callbacks=[
+                lgb.early_stopping(60, verbose=False),
+                lgb.log_evaluation(period=25),
+            ],
         )
         val_pred_lgbm = np.maximum(np.exp(m_lgbm.predict(X_va)), 0.01)
         oof_lgbm[v_idx] = val_pred_lgbm
         test_lgbm += np.maximum(np.exp(m_lgbm.predict(X_test)), 0.01) / n_folds
-        print(f"  Fold {fold+1} LightGBM SMAPE: {smape(y_va_true, val_pred_lgbm):.2f}%")
+        print(f"  >>> Fold {fold+1} LightGBM SMAPE: {smape(y_va_true, val_pred_lgbm):.2f}% <<<")
 
-        # 3. CatBoost (MAE loss)
+        # 3. CatBoost (MAE loss with periodic progress)
         m_cat = CatBoostRegressor(
             loss_function="MAE",
-            iterations=1200,
-            learning_rate=0.08,
+            iterations=350,
+            learning_rate=0.1,
             depth=6,
             random_seed=42,
             thread_count=-1,
-            verbose=0,
+            verbose=50,
         )
         m_cat.fit(
             X_tr, y_tr_log,
             eval_set=(X_va, y_va_log),
-            early_stopping_rounds=80,
-            verbose=False,
+            early_stopping_rounds=50,
+            verbose=50,
         )
         val_pred_cat = np.maximum(np.exp(m_cat.predict(X_va)), 0.01)
         oof_cat[v_idx] = val_pred_cat
         test_cat += np.maximum(np.exp(m_cat.predict(X_test)), 0.01) / n_folds
-        print(f"  Fold {fold+1} CatBoost SMAPE: {smape(y_va_true, val_pred_cat):.2f}%")
+        print(f"  >>> Fold {fold+1} CatBoost SMAPE: {smape(y_va_true, val_pred_cat):.2f}% <<<")
 
     print("\n" + "=" * 60)
     print(f"Overall OOF Ridge SMAPE:    {smape(y_train, oof_ridge):.2f}%")
