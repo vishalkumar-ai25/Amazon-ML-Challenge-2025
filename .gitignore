@@ -1,0 +1,23 @@
+# Environments
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data & Image Caches (Large files)
+*.DS_Store
+images/
+data/cache/
+.ipynb_checkpoints/
+dataset/train.csv
+dataset/test.csv
+
+# Kaggle / Model Weights
+*.bin
+*.pt
+*.pth
+*.onnx
+*.joblib
+*.pkl
