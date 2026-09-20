@@ -163,21 +163,36 @@ def main():
     print(" Amazon ML Challenge 2025: Production Model Pipeline")
     print("=" * 60)
 
-    # Locate datasets
-    possible_paths = [
-        ("dataset/train.csv", "dataset/test.csv", "dataset/test_out.csv"),
-        ("/kaggle/input/amazon-ml/train.csv", "/kaggle/input/amazon-ml/test.csv", "/kaggle/working/test_out.csv"),
-        ("/kaggle/input/amazon-ml-challenge-2025/train.csv", "/kaggle/input/amazon-ml-challenge-2025/test.csv", "/kaggle/working/test_out.csv"),
-    ]
+    # Dynamically locate datasets across Kaggle and local environments
+    train_path, test_path = None, None
+    search_bases = ["/kaggle/input", ".", "dataset"]
 
-    train_path, test_path, out_path = None, None, None
-    for tr, te, out in possible_paths:
-        if os.path.exists(tr) and os.path.exists(te):
-            train_path, test_path, out_path = tr, te, out
+    for base in search_bases:
+        if not os.path.exists(base):
+            continue
+        for root, _, files in os.walk(base):
+            for f in files:
+                if f.lower() == "train.csv" and not train_path:
+                    train_path = os.path.join(root, f)
+                elif f.lower() == "test.csv" and not test_path:
+                    test_path = os.path.join(root, f)
+            if train_path and test_path:
+                break
+        if train_path and test_path:
             break
 
-    if not train_path:
-        raise FileNotFoundError("Could not locate train.csv and test.csv in standard locations!")
+    out_path = "/kaggle/working/test_out.csv" if os.path.exists("/kaggle/working") else "dataset/test_out.csv"
+
+    if not train_path or not test_path:
+        print("\nERROR: Could not automatically locate train.csv and test.csv!")
+        if os.path.exists("/kaggle/input"):
+            print("\nFiles found in /kaggle/input:")
+            for root, dirs, files in os.walk("/kaggle/input"):
+                print(f"  {root}: {files}")
+            print("\nTIP: Make sure you clicked '+ Add Input / Data' on the right sidebar in Kaggle and attached your dataset.")
+        raise FileNotFoundError(
+            f"Could not locate train.csv and test.csv. Found train: {train_path}, test: {test_path}"
+        )
 
     print(f"Loading train data: {train_path}")
     train_df = pd.read_csv(train_path)
