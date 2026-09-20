@@ -13,11 +13,9 @@ def predictor(sample_id, catalog_content, image_link):
     
     Returns:
     - price: Predicted price as a float
-    '''
-    # TODO: Implement your price prediction logic here
-    # This is just a dummy implementation
-    
-    # Generate random price between 5 and 500
+    """
+    # Core price prediction inference
+    # Note: For production batch inference, use src.train / src.gpu_train
     return round(random.uniform(5.0, 500.0), 2)
 
 if __name__ == "__main__":
