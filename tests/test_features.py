@@ -237,3 +237,36 @@ class TestAdvancedFeatures:
 
         text_no_bullets = "Item Name: Something\nValue: 10\nUnit: Count"
         assert count_bullet_points(text_no_bullets) == 0
+
+    def test_physical_conversions(self):
+        from src.features import convert_to_grams, convert_to_ml, convert_to_pieces
+        # 1 lb should be ~453.59g
+        assert pytest.approx(convert_to_grams(1.0, "lb"), 0.1) == 453.59
+        # 16 oz should also be ~453.59g
+        assert pytest.approx(convert_to_grams(16.0, "oz"), 0.1) == 453.59
+        # 1 fl oz should be ~29.57ml
+        assert pytest.approx(convert_to_ml(1.0, "fl_oz"), 0.1) == 29.57
+        # 12 count should be 12 pieces
+        assert convert_to_pieces(12.0, "count") == 12.0
+
+    def test_number_to_words(self):
+        from src.features import number_to_words
+        assert number_to_words(1) == "one"
+        assert number_to_words(6) == "six"
+        assert number_to_words(12) == "twelve"
+        assert number_to_words(24) == "twenty four"
+
+    def test_build_llm_prompt(self):
+        from src.features import build_llm_prompt
+        row = {
+            "item_name": "Premium Colombian Coffee Beans",
+            "value_num": 2.0,
+            "unit_normalized": "lb",
+            "pack_qty": 2.0,
+            "description_raw": "Single origin dark roast coffee.",
+        }
+        prompt = build_llm_prompt(row)
+        assert "Product: Premium Colombian Coffee Beans" in prompt
+        assert "Size: 2 lb" in prompt
+        assert "Multipack: two pack" in prompt
+        assert "Specifications: Single origin dark roast" in prompt

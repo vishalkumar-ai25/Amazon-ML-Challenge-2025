@@ -177,6 +177,116 @@ def count_bullet_points(text: object) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Physical scale conversion factors (Standardized Base Units)
+# ---------------------------------------------------------------------------
+
+_WEIGHT_TO_GRAMS: dict[str, float] = {
+    "g": 1.0,
+    "gram": 1.0,
+    "grams": 1.0,
+    "kg": 1000.0,
+    "kilogram": 1000.0,
+    "kilograms": 1000.0,
+    "oz": 28.3495,
+    "ounce": 28.3495,
+    "ounces": 28.3495,
+    "lb": 453.592,
+    "pound": 453.592,
+    "pounds": 453.592,
+    "lbs": 453.592,
+}
+
+_VOLUME_TO_ML: dict[str, float] = {
+    "ml": 1.0,
+    "milliliter": 1.0,
+    "milliliters": 1.0,
+    "l": 1000.0,
+    "liter": 1000.0,
+    "liters": 1000.0,
+    "fl_oz": 29.5735,
+    "fluid ounce": 29.5735,
+    "fluid ounces": 29.5735,
+}
+
+_COUNT_TO_PIECES: dict[str, float] = {
+    "count": 1.0,
+    "each": 1.0,
+    "piece": 1.0,
+    "pieces": 1.0,
+    "unit": 1.0,
+    "units": 1.0,
+    "pack": 1.0,
+    "packs": 1.0,
+    "ct": 1.0,
+    "can": 1.0,
+    "bottle": 1.0,
+    "jar": 1.0,
+    "bag": 1.0,
+}
+
+
+def convert_to_grams(value: float, unit: str) -> float:
+    """Convert quantity to total grams if unit is weight; otherwise 0.0."""
+    factor = _WEIGHT_TO_GRAMS.get(str(unit).lower().strip(), 0.0)
+    return float(value) * factor
+
+
+def convert_to_ml(value: float, unit: str) -> float:
+    """Convert quantity to total milliliters if unit is volume; otherwise 0.0."""
+    factor = _VOLUME_TO_ML.get(str(unit).lower().strip(), 0.0)
+    return float(value) * factor
+
+
+def convert_to_pieces(value: float, unit: str) -> float:
+    """Convert quantity to piece count if unit is count; otherwise 0.0."""
+    factor = _COUNT_TO_PIECES.get(str(unit).lower().strip(), 0.0)
+    return float(value) * factor
+
+
+_NUM_WORDS = {
+    0: "zero", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+    6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+    11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen",
+    16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty",
+    24: "twenty four", 30: "thirty", 32: "thirty two", 36: "thirty six",
+    48: "forty eight", 50: "fifty", 60: "sixty", 72: "seventy two", 100: "one hundred",
+}
+
+
+def number_to_words(val: object) -> str:
+    """Convert integer numbers to word representations to improve sub-word tokenization."""
+    try:
+        n = int(round(float(val)))
+        if n in _NUM_WORDS:
+            return _NUM_WORDS[n]
+        return str(n)
+    except Exception:
+        return str(val)
+
+
+def build_llm_prompt(row: pd.Series | dict) -> str:
+    """Build a structured text prompt for frozen foundation language models."""
+    item_name = str(row.get("item_name", "")).strip()
+    unit = str(row.get("unit_normalized", "")).strip()
+    val = row.get("value_num", 1.0)
+    pack_qty = row.get("pack_qty", 1.0)
+    bullets = str(row.get("description_raw", "")).strip()
+
+    pack_word = number_to_words(pack_qty)
+    val_str = f"{val:.1f}".rstrip("0").rstrip(".")
+
+    parts = [f"Product: {item_name}"]
+    if val > 0:
+        parts.append(f"Size: {val_str} {unit}")
+    if pack_qty > 1.0:
+        parts.append(f"Multipack: {pack_word} pack")
+    if bullets:
+        parts.append(f"Specifications: {bullets[:300]}")
+
+    return " | ".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Structured feature extraction
 # ---------------------------------------------------------------------------
 
@@ -226,6 +336,28 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
     result["log_unit_size"] = np.log1p(result["unit_size"])
     result["total_quantity"] = result["value_num"] * result["pack_qty"]
     result["log_total_quantity"] = np.log1p(result["total_quantity"])
+
+    # Physical conversions (Standardized Base Units)
+    result["total_grams"] = result.apply(
+        lambda r: convert_to_grams(r["value_num"] * r["pack_qty"], r["unit_normalized"]), axis=1
+    )
+    result["total_ml"] = result.apply(
+        lambda r: convert_to_ml(r["value_num"] * r["pack_qty"], r["unit_normalized"]), axis=1
+    )
+    result["total_pieces"] = result.apply(
+        lambda r: convert_to_pieces(r["value_num"] * r["pack_qty"], r["unit_normalized"]), axis=1
+    )
+
+    result["log_total_grams"] = np.log1p(result["total_grams"])
+    result["log_total_ml"] = np.log1p(result["total_ml"])
+    result["log_total_pieces"] = np.log1p(result["total_pieces"])
+
+    # Unified standard quantity across physical dimensions
+    result["std_quantity"] = result["total_grams"] + result["total_ml"] + result["total_pieces"]
+    result["log_std_quantity"] = np.log1p(result["std_quantity"])
+
+    # Structured prompt for foundation models
+    result["llm_prompt"] = result.apply(build_llm_prompt, axis=1)
 
     # Bullet points and text length statistics
     result["num_bullets"] = result["catalog_content"].apply(count_bullet_points)
@@ -292,6 +424,10 @@ NUMERIC_COLS = [
     "log_pack_qty",
     "log_unit_size",
     "log_total_quantity",
+    "log_total_grams",
+    "log_total_ml",
+    "log_total_pieces",
+    "log_std_quantity",
     "name_len",
     "content_len",
     "desc_len",

@@ -99,3 +99,35 @@ def apply_blend(
         blended += w * np.asarray(preds, dtype=np.float64)
 
     return np.maximum(blended, clip_min)
+
+
+def create_price_stratified_folds(
+    y: np.ndarray,
+    n_folds: int = 5,
+    *,
+    n_bins: int = 10,
+    seed: int = 42,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Create Stratified K-Fold CV splits based on target price quantiles.
+
+    Ensures balanced distribution of extreme price outliers across all folds.
+
+    Args:
+        y: 1D array of ground truth prices.
+        n_folds: Number of folds.
+        n_bins: Number of quantile bins for stratification.
+        seed: Random seed.
+
+    Returns:
+        List of (train_indices, val_indices) tuples.
+    """
+    import pandas as pd
+    from sklearn.model_selection import StratifiedKFold
+
+    y_arr = np.asarray(y, dtype=np.float64)
+    # Discretize price into quantiles
+    bins = pd.qcut(y_arr, q=n_bins, labels=False, duplicates="drop")
+
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    return list(skf.split(y_arr, bins))
+
