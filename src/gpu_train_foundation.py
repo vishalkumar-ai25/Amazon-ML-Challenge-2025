@@ -39,6 +39,10 @@ from src.postprocess import (
     optimize_clip_floor,
     apply_postprocessing,
 )
+from src.stacking import (
+    FeatureConditionedStacker,
+    evaluate_stacking_cv,
+)
 
 
 def main():
@@ -332,7 +336,7 @@ def main():
     print(f"  >>> FINAL CALIBRATED ENSEMBLE OOF SMAPE: {cal_smape:.2f}% <<<", flush=True)
     print(f"=======================================================", flush=True)
 
-    # Generate, calibrate, and validate test predictions
+    # Generate and calibrate Nelder-Mead test predictions
     test_dict = {
         "adapter": test_adapter,
         "lgbm": test_lgbm,
@@ -342,9 +346,24 @@ def main():
     blended_test = apply_blend(test_dict, weights, clip_min=opt_floor)
     calibrated_test = apply_postprocessing(blended_test, multiplier=opt_alpha, clip_min=opt_floor)
 
+    # 8. Feature-Conditioned Stacking Meta-Learner vs Static Blend Comparison
+    print("\n[7/7] Evaluating Feature-Conditioned Stacking Meta-Learner via Nested CV...", flush=True)
+    stack_results = evaluate_stacking_cv(oof_dict, y_train, conditioning_df=train_struct, n_splits=5)
+    stack_cv_smape = stack_results["stacking_oof_smape"]
+    print(f"Stacking Meta-Learner CV SMAPE: {stack_cv_smape:.2f}% (vs Nelder-Mead Calibrated: {cal_smape:.2f}%)", flush=True)
+
+    if stack_cv_smape < cal_smape:
+        print(f">>> Stacking Meta-Learner wins by {cal_smape - stack_cv_smape:.2f}%! Using Stacker for test predictions.", flush=True)
+        stacker = FeatureConditionedStacker(alpha=10.0, calibrate_postprocess=True)
+        stacker.fit(oof_dict, y_train, conditioning_df=train_struct)
+        final_test_preds = stacker.predict(test_dict, conditioning_df=test_struct)
+    else:
+        print(">>> Static Calibrated Nelder-Mead Blend wins. Using Calibrated Blend for test predictions.", flush=True)
+        final_test_preds = calibrated_test
+
     sub_df = pd.DataFrame({
         "sample_id": test_df["sample_id"],
-        "price": calibrated_test,
+        "price": final_test_preds,
     })
 
     assert len(sub_df) == len(test_df), "Row count mismatch"
