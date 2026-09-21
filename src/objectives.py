@@ -124,17 +124,24 @@ def lgb_smape_eval(a, b) -> Tuple[str, float, bool]:
 # XGBoost Custom Objective & Evaluation Callbacks
 # ---------------------------------------------------------------------------
 
-def xgb_smape_objective(preds: np.ndarray, dtrain) -> Tuple[np.ndarray, np.ndarray]:
+def xgb_smape_objective(a, b) -> Tuple[np.ndarray, np.ndarray]:
     """XGBoost custom objective for direct SMAPE minimization in log-space.
 
-    Args:
-        preds: Model output predictions z = ln(price).
-        dtrain: xgboost.DMatrix containing labels.
-
-    Returns:
-        (grad, hess) arrays.
+    Supports both:
+    1. DMatrix API: (preds, dtrain)
+    2. XGBRegressor sklearn API: (y_true, y_pred)
     """
-    labels = dtrain.get_label()
+    if hasattr(b, "get_label"):
+        preds = a
+        labels = b.get_label()
+    elif hasattr(a, "get_label"):
+        preds = b
+        labels = a.get_label()
+    else:
+        # sklearn API: (y_true, y_pred)
+        labels = a
+        preds = b
+
     if np.median(labels) < 15.0 and (labels > 0).all():
         y_true = np.exp(labels)
     else:
@@ -144,17 +151,23 @@ def xgb_smape_objective(preds: np.ndarray, dtrain) -> Tuple[np.ndarray, np.ndarr
     return grad, hess
 
 
-def xgb_smape_eval(preds: np.ndarray, dtrain) -> Tuple[str, float]:
+def xgb_smape_eval(a, b) -> Tuple[str, float]:
     """XGBoost custom evaluation metric computing exact SMAPE (%).
 
-    Args:
-        preds: Model output predictions z = ln(price).
-        dtrain: xgboost.DMatrix.
-
-    Returns:
-        ('smape', smape_score).
+    Supports both:
+    1. DMatrix API: (preds, dtrain)
+    2. XGBRegressor sklearn API: (y_true, y_pred)
     """
-    labels = dtrain.get_label()
+    if hasattr(b, "get_label"):
+        preds = a
+        labels = b.get_label()
+    elif hasattr(a, "get_label"):
+        preds = b
+        labels = a.get_label()
+    else:
+        labels = a
+        preds = b
+
     if np.median(labels) < 15.0 and (labels > 0).all():
         y_true = np.exp(labels)
     else:

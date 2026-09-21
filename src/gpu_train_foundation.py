@@ -333,6 +333,7 @@ def main():
         m_lgbm.fit(
             X_tr_lgbm, y_tr_log,
             eval_set=[(X_va_lgbm, y_va_log)],
+            eval_metric=lgb_smape_eval,
             callbacks=[lgb.early_stopping(80, verbose=False), lgb.log_evaluation(period=200)],
         )
         val_pred_lgbm = np.maximum(np.exp(m_lgbm.predict(X_va_lgbm)), 0.01)
