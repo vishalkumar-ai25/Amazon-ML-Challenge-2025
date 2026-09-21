@@ -61,8 +61,10 @@ python -m src.extract_embeddings \
     --output_dir "data/embeddings" \
     --vision_only
 
+export PYTHONUNBUFFERED=1
+
 echo -e "\n=== Step 5: Running Multimodal Adapter + Dual GBDTs 5-Fold Training ==="
-python -m src.gpu_train_foundation \
+python -u -m src.gpu_train_foundation \
     --model_tag "bge_large_en_v1.5" \
     --vision_tag "siglip_base_patch16_224" \
     --image_dir "images" \
