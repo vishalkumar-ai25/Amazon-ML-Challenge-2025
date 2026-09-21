@@ -83,7 +83,8 @@ def lgb_smape_objective(a, b) -> Tuple[np.ndarray, np.ndarray]:
         labels = a
         preds = b
 
-    if np.median(labels) < 15.0 and (labels > 0).all():
+    # If labels are in log-space (max < 20.0, since ln(2800) ≈ 7.93), invert to raw prices
+    if np.max(labels) < 20.0:
         y_true = np.exp(labels)
     else:
         y_true = labels
@@ -104,7 +105,8 @@ def lgb_smape_eval(a, b) -> Tuple[str, float, bool]:
         labels = a
         preds = b
 
-    if np.median(labels) < 15.0 and (labels > 0).all():
+    # If labels are in log-space (max < 20.0, since ln(2800) ≈ 7.93), invert to raw prices
+    if np.max(labels) < 20.0:
         y_true = np.exp(labels)
     else:
         y_true = labels
@@ -142,7 +144,8 @@ def xgb_smape_objective(a, b) -> Tuple[np.ndarray, np.ndarray]:
         labels = a
         preds = b
 
-    if np.median(labels) < 15.0 and (labels > 0).all():
+    # If labels are in log-space (max < 20.0, since ln(2800) ≈ 7.93), invert to raw prices
+    if np.max(labels) < 20.0:
         y_true = np.exp(labels)
     else:
         y_true = labels
@@ -168,7 +171,8 @@ def xgb_smape_eval(a, b) -> Tuple[str, float]:
         labels = a
         preds = b
 
-    if np.median(labels) < 15.0 and (labels > 0).all():
+    # If labels are in log-space (max < 20.0, since ln(2800) ≈ 7.93), invert to raw prices
+    if np.max(labels) < 20.0:
         y_true = np.exp(labels)
     else:
         y_true = labels
