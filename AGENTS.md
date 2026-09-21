@@ -36,9 +36,15 @@
   - LightGBM (127 leaves, Huber loss, 32 threads): **49.18% SMAPE**
   - **Optimal Convex Blend (Nelder-Mead on SMAPE):** **49.13% SMAPE**
   - Blending weights: 89.4% LightGBM + 10.6% CatBoost + 0.0% Ridge
-- **Milestone 2 (Frozen Foundation Embeddings + Neural Pricing Adapter): IMPLEMENTED & READY FOR GPU**
-  - Architecture: Frozen BGE-large / Qwen2.5-3B + Multimodal Neural Adapter (Differentiable SMAPE Loss) + LightGBM + CatBoost GPU + Stratified K-Fold.
-  - Target: Push SMAPE towards **~40–42%** on RTX A4000 GPU (`24je093024je0930@172.16.203.23`).
+- **Milestone 2 (Frozen Foundation Embeddings + Neural Pricing Adapter): COMPLETED**
+  - Architecture: Frozen BGE-large (1024-dim) + Multimodal Neural Adapter (Differentiable SMAPE Loss) + LightGBM (Huber) + CatBoost GPU (MAE) + Stratified K-Fold.
+  - Neural Adapter OOF SMAPE: **50.37%**
+  - LightGBM on Physical features: **49.18%**
+  - **Optimal 4-Way Convex Blend (Nelder-Mead on SMAPE):** **47.32% SMAPE**!
+  - Blending weights: **59.2% LightGBM + 40.8% Neural Adapter** (0% CatBoost, 0% Ridge).
+  - Test Submission: Exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server.
+- **Next Targets:**
+  - Milestone 3 (Multimodal Vision Features via SigLIP/DINOv2 + Qwen2.5-7B Embeddings): Target SMAPE < 42%
 
 ## 5. Repository Architecture & Directory Structure
 ```

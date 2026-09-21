@@ -89,8 +89,10 @@ We developed an end-to-end, reproducible machine learning pipeline to predict op
 |---------------------|---------------|-------|
 | Linear Ridge (35K TF-IDF) | **67.92%** | L2 regularized linear anchor on ln(price) |
 | CatBoost GPU (1500 trees, Depth 6) | **52.07%** | Exact MAE loss on RTX A4000 GPU |
-| LightGBM (127 leaves, Huber loss) | **49.18%** | 32-core parallel histogram booster |
-| **Optimal Convex Blend (Nelder-Mead)** | **49.13%** | **89.4% LightGBM + 10.6% CatBoost (Best Generalization)** |
+| Multimodal Neural Adapter (BGE-Large) | **50.37%** | Frozen 1024-dim foundation embeddings + Differentiable SMAPE |
+| LightGBM (127 leaves, Huber loss) | **49.18%** | 32-core parallel histogram booster on physical features |
+| Milestone 1 Blend (GBDTs only) | **49.13%** | 89.4% LightGBM + 10.6% CatBoost |
+| **Milestone 2 Foundation Blend (Nelder-Mead)** | **47.32%** | **59.2% LightGBM + 40.8% Neural Adapter (Best Generalization)** |
 
 ---
 
