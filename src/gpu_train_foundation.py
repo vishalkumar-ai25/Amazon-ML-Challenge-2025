@@ -23,7 +23,10 @@ from src.features import (
     extract_text_features,
     build_numeric_matrix,
     build_feature_matrix,
+    extract_visual_metadata_features,
+    build_vision_svd_features,
     NUMERIC_COLS,
+    VISUAL_METADATA_COLS,
 )
 from src.ensemble import (
     find_optimal_blend_weights,
@@ -35,7 +38,9 @@ from src.adapter import train_adapter_cv, HAS_TORCH
 
 def main():
     parser = argparse.ArgumentParser(description="GPU Training with Foundation Embeddings & Neural Adapter")
-    parser.add_argument("--model_tag", default="bge_large_en_v1.5", help="Embedding file tag (e.g. bge_large_en_v1.5 or qwen2.5_3b)")
+    parser.add_argument("--model_tag", default="bge_large_en_v1.5", help="Text embedding tag (e.g. bge_large_en_v1.5 or qwen2.5_3b)")
+    parser.add_argument("--vision_tag", default=None, help="Vision embedding tag (e.g. siglip_base or dinov2_base)")
+    parser.add_argument("--image_dir", default="images", help="Folder containing downloaded images")
     parser.add_argument("--embeddings_dir", default="data/embeddings", help="Directory containing pre-extracted embeddings")
     parser.add_argument("--epochs", type=int, default=35, help="Epochs for neural adapter per fold")
     parser.add_argument("--batch_size", type=int, default=256, help="Adapter mini-batch size")
@@ -43,7 +48,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 75)
-    print("  Amazon ML Challenge 2025: Foundation Model + Neural Adapter GPU Pipeline")
+    print("  Amazon ML Challenge 2025: Multimodal Foundation Model + GBDT Pipeline")
     print("=" * 75)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -74,22 +79,39 @@ def main():
     train_struct["brand_freq"] = train_struct["brand"].map(b_freq).fillna(0)
     test_struct["brand_freq"] = test_struct["brand"].map(b_freq).fillna(0)
 
-    num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"]
+    # Check for visual metadata features
+    train_img_dir = os.path.join(base_dir, args.image_dir, "train")
+    test_img_dir = os.path.join(base_dir, args.image_dir, "test")
+    has_images = os.path.exists(train_img_dir) and os.path.exists(test_img_dir)
+
+    if has_images:
+        print("Extracting visual metadata properties from downloaded images...")
+        t_v0 = time.time()
+        train_vmeta = extract_visual_metadata_features(train_df, train_img_dir)
+        test_vmeta = extract_visual_metadata_features(test_df, test_img_dir)
+        for col in VISUAL_METADATA_COLS:
+            train_struct[col] = train_vmeta[col]
+            test_struct[col] = test_vmeta[col]
+        num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"] + VISUAL_METADATA_COLS
+        print(f"Visual metadata extraction completed in {time.time() - t_v0:.1f}s")
+    else:
+        num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"]
+
     X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
     X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
 
-    # 2. Check Foundation Embeddings
+    # 2. Check Foundation Embeddings (Text & Vision)
     train_emb_file = os.path.join(emb_dir, f"train_text_{args.model_tag}.npy")
     test_emb_file = os.path.join(emb_dir, f"test_text_{args.model_tag}.npy")
     has_embeddings = os.path.exists(train_emb_file) and os.path.exists(test_emb_file)
 
     if has_embeddings:
-        print(f"\n[2/5] Loading precomputed foundation embeddings: {train_emb_file}...")
+        print(f"\n[2/5] Loading precomputed text foundation embeddings: {train_emb_file}...")
         train_text_emb = np.load(train_emb_file)
         test_text_emb = np.load(test_emb_file)
         print(f"Loaded text embeddings shape: {train_text_emb.shape}")
     else:
-        print(f"\n[2/5] Foundation embeddings not found at {train_emb_file}!")
+        print(f"\n[2/5] Text foundation embeddings not found at {train_emb_file}!")
         print("Falling back to TruncatedSVD on TF-IDF for adapter input...")
         from sklearn.decomposition import TruncatedSVD
         from sklearn.feature_extraction.text import TfidfVectorizer
@@ -100,11 +122,30 @@ def main():
         train_text_emb = svd.fit_transform(X_tfidf_tr).astype(np.float32)
         test_text_emb = svd.transform(X_tfidf_te).astype(np.float32)
 
-    # Check for optional vision embeddings
-    train_vision_file = os.path.join(emb_dir, "train_vision_siglip.npy")
-    test_vision_file = os.path.join(emb_dir, "test_vision_siglip.npy")
-    train_vision_emb = np.load(train_vision_file) if os.path.exists(train_vision_file) else None
-    test_vision_emb = np.load(test_vision_file) if os.path.exists(test_vision_file) else None
+    # Check for vision embeddings
+    v_tag = args.vision_tag
+    if v_tag is None:
+        for candidate in ["siglip_base", "dinov2_base", "siglip_base_patch16_224", "siglip"]:
+            if os.path.exists(os.path.join(emb_dir, f"train_vision_{candidate}.npy")):
+                v_tag = candidate
+                break
+
+    train_vision_emb = None
+    test_vision_emb = None
+    train_v_svd = None
+    test_v_svd = None
+
+    if v_tag:
+        tr_v_path = os.path.join(emb_dir, f"train_vision_{v_tag}.npy")
+        te_v_path = os.path.join(emb_dir, f"test_vision_{v_tag}.npy")
+        if os.path.exists(tr_v_path) and os.path.exists(te_v_path):
+            print(f"Loading vision embeddings ({v_tag}): {tr_v_path}...")
+            train_vision_emb = np.load(tr_v_path)
+            test_vision_emb = np.load(te_v_path)
+            print(f"Vision embeddings shape: {train_vision_emb.shape}")
+
+            print("Extracting 32-dim SVD vision features for GBDT models...")
+            train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=32)
 
     # TF-IDF high-capacity representations for GBDT
     print("Building high-capacity TF-IDF matrix for GBDT models...")
@@ -116,8 +157,9 @@ def main():
     )
     X_text_test, _ = extract_text_features(test_struct["catalog_content"], vectorizer=tfidf)
 
-    X_train_gbdt = build_feature_matrix(X_text_train, X_num_train)
-    X_test_gbdt = build_feature_matrix(X_text_test, X_num_test)
+    X_train_gbdt = build_feature_matrix(X_text_train, X_num_train, vision_svd_features=train_v_svd)
+    X_test_gbdt = build_feature_matrix(X_text_test, X_num_test, vision_svd_features=test_v_svd)
+    print(f"Total GBDT Feature Matrix Shape: {X_train_gbdt.shape}")
 
     y_train = train_df["price"].values
     y_log = np.log(np.maximum(y_train, 0.01))
@@ -127,7 +169,7 @@ def main():
     n_folds = 5
     cv_splits = create_price_stratified_folds(y_train, n_folds=n_folds, seed=42)
 
-    # 4. Train Neural Pricing Adapter
+    # 4. Train Multimodal Neural Pricing Adapter
     print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...")
     oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
         train_text_emb=train_text_emb,

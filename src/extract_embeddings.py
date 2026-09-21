@@ -99,7 +99,7 @@ def extract_vision_embeddings_hf(
     batch_size: int = 64,
     device: Optional[str] = None,
 ) -> np.ndarray:
-    """Extract dense vision representations using SigLIP or DINOv2.
+    """Extract dense vision representations using SigLIP, DINOv2, or other ViT models.
 
     Args:
         image_paths: List of local filepaths to downloaded product images.
@@ -123,12 +123,14 @@ def extract_vision_embeddings_hf(
     model = AutoModel.from_pretrained(model_name, torch_dtype=dtype).to(device)
     model.eval()
 
-    hidden_dim = model.config.hidden_size
     n_samples = len(image_paths)
-    all_embeddings = np.zeros((n_samples, hidden_dim), dtype=np.float32)
+    all_embeddings: Optional[np.ndarray] = None
+    hidden_dim: Optional[int] = None
+    valid_count = 0
+    missing_count = 0
 
     with torch.no_grad():
-        for i in tqdm(range(0, n_samples, batch_size), desc="Extracting vision embeddings"):
+        for i in tqdm(range(0, n_samples, batch_size), desc=f"Vision emb ({model_name.split('/')[-1]})"):
             batch_paths = image_paths[i : i + batch_size]
             valid_images = []
             valid_indices = []
@@ -139,22 +141,51 @@ def extract_vision_embeddings_hf(
                         img = Image.open(p).convert("RGB")
                         valid_images.append(img)
                         valid_indices.append(i + rel_idx)
+                        valid_count += 1
                     except Exception:
-                        pass
+                        missing_count += 1
+                else:
+                    missing_count += 1
 
             if valid_images:
                 inputs = processor(images=valid_images, return_tensors="pt").to(device, dtype=dtype)
-                outputs = model(**inputs)
-                # Pool pooled output or last hidden state mean
-                if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-                    emb = outputs.pooler_output
+
+                # Check model architecture specifics (SigLIP / CLIP vs standard ViT / DINOv2)
+                if hasattr(model, "get_image_features"):
+                    emb = model.get_image_features(**inputs)
                 else:
-                    emb = outputs.last_hidden_state.mean(dim=1)
+                    outputs = model(**inputs)
+                    if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                        emb = outputs.pooler_output
+                    elif hasattr(outputs, "last_hidden_state"):
+                        # If CLS token exists (e.g. DINOv2, ViT) and seq_len > 1
+                        if outputs.last_hidden_state.shape[1] > 1:
+                            emb = outputs.last_hidden_state[:, 0]
+                        else:
+                            emb = outputs.last_hidden_state.mean(dim=1)
+                    else:
+                        emb = outputs[0][:, 0] if outputs[0].ndim == 3 else outputs[0]
 
                 emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
-                all_embeddings[valid_indices] = emb.cpu().to(torch.float32).numpy()
+                emb_np = emb.cpu().to(torch.float32).numpy()
 
+                if all_embeddings is None:
+                    hidden_dim = emb_np.shape[1]
+                    all_embeddings = np.zeros((n_samples, hidden_dim), dtype=np.float32)
+
+                all_embeddings[valid_indices] = emb_np
+
+    if all_embeddings is None:
+        hidden_dim = getattr(getattr(model, "config", None), "hidden_size", 768)
+        all_embeddings = np.zeros((n_samples, hidden_dim), dtype=np.float32)
+
+    print(f"Extracted vision embeddings: {valid_count} valid images, {missing_count} missing/corrupt. Shape: {all_embeddings.shape}")
     return all_embeddings
+
+
+def clean_model_tag(model_name: str) -> str:
+    """Normalize model repo string to a file-safe tag."""
+    return model_name.split("/")[-1].lower().replace("-", "_").replace(".", "_")
 
 
 def main():
@@ -162,8 +193,10 @@ def main():
     parser.add_argument("--model", default="BAAI/bge-large-en-v1.5", help="Text model repo ID")
     parser.add_argument("--batch_size", type=int, default=64, help="GPU batch size")
     parser.add_argument("--output_dir", default="data/embeddings", help="Folder to save cached embeddings")
-    parser.add_argument("--vision_model", default=None, help="Optional vision model ID (e.g. google/siglip-base-patch16-224)")
+    parser.add_argument("--vision_model", default=None, help="Optional vision model ID (e.g. google/siglip-base-patch16-224 or facebook/dinov2-base)")
     parser.add_argument("--image_dir", default="images", help="Folder containing downloaded images")
+    parser.add_argument("--vision_only", action="store_true", help="Skip text extraction and only extract vision embeddings")
+    parser.add_argument("--text_only", action="store_true", help="Skip vision extraction and only extract text embeddings")
     args = parser.parse_args()
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -176,45 +209,48 @@ def main():
     train_df = pd.read_csv(train_path)
     test_df = pd.read_csv(test_path)
 
-    print("Extracting structured prompt fields...")
-    train_struct = extract_structured_features(train_df)
-    test_struct = extract_structured_features(test_df)
-
-    tag = args.model.split("/")[-1].lower().replace("-", "_")
-
     # 1. Text embeddings
-    train_out_text = os.path.join(out_dir, f"train_text_{tag}.npy")
-    test_out_text = os.path.join(out_dir, f"test_text_{tag}.npy")
+    if not args.vision_only:
+        print("Extracting structured prompt fields...")
+        train_struct = extract_structured_features(train_df)
+        test_struct = extract_structured_features(test_df)
 
-    if not os.path.exists(train_out_text) or not os.path.exists(test_out_text):
-        print(f"\n[1/2] Extracting text embeddings using {args.model}...")
-        train_emb = extract_text_embeddings_hf(train_struct["llm_prompt"], model_name=args.model, batch_size=args.batch_size)
-        test_emb = extract_text_embeddings_hf(test_struct["llm_prompt"], model_name=args.model, batch_size=args.batch_size)
+        tag = clean_model_tag(args.model)
+        train_out_text = os.path.join(out_dir, f"train_text_{tag}.npy")
+        test_out_text = os.path.join(out_dir, f"test_text_{tag}.npy")
 
-        np.save(train_out_text, train_emb)
-        np.save(test_out_text, test_emb)
-        print(f"Saved: {train_out_text} shape: {train_emb.shape}")
-        print(f"Saved: {test_out_text} shape: {test_emb.shape}")
-    else:
-        print(f"Found existing cached text embeddings in {out_dir}")
+        if not os.path.exists(train_out_text) or not os.path.exists(test_out_text):
+            print(f"\n[Text] Extracting text embeddings using {args.model}...")
+            train_emb = extract_text_embeddings_hf(train_struct["llm_prompt"], model_name=args.model, batch_size=args.batch_size)
+            test_emb = extract_text_embeddings_hf(test_struct["llm_prompt"], model_name=args.model, batch_size=args.batch_size)
+
+            np.save(train_out_text, train_emb)
+            np.save(test_out_text, test_emb)
+            print(f"Saved: {train_out_text} shape: {train_emb.shape}")
+            print(f"Saved: {test_out_text} shape: {test_emb.shape}")
+        else:
+            print(f"Found existing cached text embeddings in {out_dir}")
 
     # 2. Vision embeddings (optional)
-    if args.vision_model:
-        v_tag = args.vision_model.split("/")[-1].lower().replace("-", "_")
+    if args.vision_model and not args.text_only:
+        v_tag = clean_model_tag(args.vision_model)
         train_out_v = os.path.join(out_dir, f"train_vision_{v_tag}.npy")
         test_out_v = os.path.join(out_dir, f"test_vision_{v_tag}.npy")
 
         train_img_paths = [os.path.join(base_dir, args.image_dir, "train", f"{sid}.jpg") for sid in train_df["sample_id"]]
         test_img_paths = [os.path.join(base_dir, args.image_dir, "test", f"{sid}.jpg") for sid in test_df["sample_id"]]
 
-        print(f"\n[2/2] Extracting vision embeddings using {args.vision_model}...")
-        train_v_emb = extract_vision_embeddings_hf(train_img_paths, model_name=args.vision_model, batch_size=args.batch_size)
-        test_v_emb = extract_vision_embeddings_hf(test_img_paths, model_name=args.vision_model, batch_size=args.batch_size)
+        if not os.path.exists(train_out_v) or not os.path.exists(test_out_v):
+            print(f"\n[Vision] Extracting vision embeddings using {args.vision_model}...")
+            train_v_emb = extract_vision_embeddings_hf(train_img_paths, model_name=args.vision_model, batch_size=args.batch_size)
+            test_v_emb = extract_vision_embeddings_hf(test_img_paths, model_name=args.vision_model, batch_size=args.batch_size)
 
-        np.save(train_out_v, train_v_emb)
-        np.save(test_out_v, test_v_emb)
-        print(f"Saved: {train_out_v} shape: {train_v_emb.shape}")
-        print(f"Saved: {test_out_v} shape: {test_v_emb.shape}")
+            np.save(train_out_v, train_v_emb)
+            np.save(test_out_v, test_v_emb)
+            print(f"Saved: {train_out_v} shape: {train_v_emb.shape}")
+            print(f"Saved: {test_out_v} shape: {test_v_emb.shape}")
+        else:
+            print(f"Found existing cached vision embeddings in {out_dir}")
 
     print("\nEmbedding extraction completed successfully!")
 

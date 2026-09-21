@@ -43,8 +43,13 @@
   - **Optimal 4-Way Convex Blend (Nelder-Mead on SMAPE):** **47.32% SMAPE**!
   - Blending weights: **59.2% LightGBM + 40.8% Neural Adapter** (0% CatBoost, 0% Ridge).
   - Test Submission: Exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server.
-- **Next Targets:**
-  - Milestone 3 (Multimodal Vision Features via SigLIP/DINOv2 + Qwen2.5-7B Embeddings): Target SMAPE < 42%
+- **Milestone 3 (Multimodal Vision Features via SigLIP / DINOv2): IMPLEMENTED & VERIFIED**
+  - Architecture: Google SigLIP (`google/siglip-base-patch16-224`, 768-dim, Apache 2.0) + Meta DINOv2 (`facebook/dinov2-base`, Apache 2.0).
+  - Vision Presence Masking & Dynamic Cross-Modal Gating: Prevents missing-image zero-vector bias from distorting predictions, smoothly falling back to text+tabular representations.
+  - Dual Vision Signal Injection:
+    - 768-dim full representations passed to Multimodal Neural Pricing Adapter with Differentiable SMAPE Loss.
+    - 32-dim TruncatedSVD components + 8 lightweight visual metadata features (`has_image`, dimensions, aspect ratio, file size, luminance, contrast, colorfulness) fed into LightGBM & CatBoost.
+  - Turnkey remote orchestration via `./run_gpu_foundation.sh` on the RTX A4000 GPU server targeting **SMAPE < 42%**.
 
 ## 5. Repository Architecture & Directory Structure
 ```
@@ -54,7 +59,7 @@ Amazon-Ml-Prep/
 ├── README.md                  # Problem description and challenge guidelines
 ├── sample_code.py             # Verified starter submission generator script
 ├── train_gpu.log              # Verified log of full 5-fold GPU training run (49.13% SMAPE)
-├── run_gpu_foundation.sh      # One-click runner script for remote GPU machine
+├── run_gpu_foundation.sh      # Turnkey runner script for remote GPU machine (Milestone 3 multimodal)
 ├── .gitignore                 # Ignore environments, caches, weights
 ├── configs/
 │   └── default.yaml           # Centralized configuration (seed, folds, lgbm, tfidf)
@@ -63,24 +68,24 @@ Amazon-Ml-Prep/
 │   ├── test.csv               # 75,000 test records
 │   ├── sample_test.csv        # Sample input
 │   ├── sample_test_out.csv    # Sample output format
-│   └── test_out.csv           # Current verified 49.13% SMAPE predictions
+│   └── test_out.csv           # Current verified predictions
 ├── src/
 │   ├── __init__.py
 │   ├── data.py                # Schema validation, train/test loading, submission checking
-│   ├── features.py            # Structured extraction, physical unit scale conversions, prompt formatting, TF-IDF
+│   ├── features.py            # Structured extraction, physical unit scale conversions, visual metadata, SVD vision, TF-IDF
 │   ├── metrics.py             # Numerically stable SMAPE evaluation metric
 │   ├── ensemble.py            # Nelder-Mead convex weight optimizer + Price-Stratified K-Fold generator
-│   ├── adapter.py             # Differentiable SMAPE Loss & Multimodal Neural Pricing Adapter
-│   ├── extract_embeddings.py  # Frozen Foundation text/vision embedding extraction & caching
-│   ├── gpu_train_foundation.py# Complete Foundation + Neural Adapter + GBDT GPU training pipeline
+│   ├── adapter.py             # Differentiable SMAPE Loss & Multimodal Neural Pricing Adapter with Gated Cross-Modal Fusion
+│   ├── extract_embeddings.py  # Frozen Foundation text/vision embedding extraction (BGE, SigLIP, DINOv2) & caching
+│   ├── gpu_train_foundation.py# Complete Multimodal Foundation + Neural Adapter + GBDT GPU training pipeline
 │   ├── gpu_train.py           # GBDT GPU training pipeline (RTX A4000)
 │   ├── train.py               # Config-driven 5-fold CV training pipeline (Ridge + LightGBM)
 │   ├── kaggle_pipeline.py     # Self-contained pipeline with auto dataset discovery
-│   ├── download_images.py     # Concurrent, resilient image downloader with URL auditing
+│   ├── download_images.py     # Concurrent, resilient image downloader with URL auditing & PIL verification
 │   ├── utils.py               # Image download utility
 │   ├── eda.py                 # Initial data inspection
 │   └── test_baseline.py       # Legacy Ridge baseline script
-├── tests/                     # Comprehensive test suite (107 tests, 105 passed, 2 skipped on non-torch)
+├── tests/                     # Comprehensive test suite (114 tests, 111 passed, 3 skipped on non-torch)
 │   ├── test_adapter.py        # Stratified K-fold & Neural Adapter tests (4 tests)
 │   ├── test_data.py           # Data loader & schema validation tests (16 tests)
 │   ├── test_ensemble.py       # Nelder-Mead blending & constraint tests (2 tests)
@@ -88,7 +93,8 @@ Amazon-Ml-Prep/
 │   ├── test_metrics.py        # SMAPE mathematical property tests (9 tests)
 │   ├── test_pipeline.py       # LightGBM & Ridge CV pipeline tests (5 tests)
 │   ├── test_security_url.py   # SSRF & URL scheme whitelisting tests (12 tests)
-│   └── test_submission.py     # Submission validation & constraint tests (2 tests)
+│   ├── test_submission.py     # Submission validation & constraint tests (2 tests)
+│   └── test_vision.py         # Visual metadata, SVD reduction, integrity auditing & adapter gating tests (7 tests)
 ├── notebooks/
 │   └── kaggle_amazon_ml_solution.ipynb # Standalone Kaggle submission notebook
 └── venv/                      # Local Python environment
@@ -103,8 +109,12 @@ Amazon-Ml-Prep/
 2. **Foundation Model Prompt Builder:**
    - Converts numbers to words (`12` $\to$ `twelve`) to prevent tokenizer fragmentation.
    - Generates structured prompt: `Product: {name} | Size: {val} {unit} | Multipack: {word} pack | Specifications: {bullets}`.
-3. **Multimodal Neural Adapter:**
+3. **Multimodal Neural Adapter with Dynamic Cross-Modal Gating:**
    - Differentiable SMAPE loss with backpropagation gradients.
-   - Text Projection MLP (256) + Tabular Projection MLP (64) + Multimodal Fusion Head (128).
-4. **Stratified Price K-Fold CV:**
+   - Text Projection MLP (256) + Gated Vision Projection (128) + Tabular Projection MLP (64) + Multimodal Fusion Head (128).
+   - Dynamic vision presence gating ensures missing/failed images smoothly default to text+tabular representations without zero-vector projection bias.
+4. **Visual Signal Injection for GBDTs:**
+   - 32-dim TruncatedSVD components extracted from normalized SigLIP embeddings.
+   - 8 visual metadata features: presence indicator, dimensions, aspect ratio, file size, luminance, contrast, colorfulness.
+5. **Stratified Price K-Fold CV:**
    - Quantile discretization ensures heavy-tailed price distribution ($0.13 to $2796) is equally represented across all 5 folds.

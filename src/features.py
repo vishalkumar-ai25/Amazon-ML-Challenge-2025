@@ -5,6 +5,7 @@ and builds TF-IDF + numeric feature matrices from catalog_content.
 """
 from __future__ import annotations
 
+import os
 import re
 from typing import Optional, Tuple
 
@@ -437,6 +438,138 @@ NUMERIC_COLS = [
     "is_value_size",
 ]
 
+VISUAL_METADATA_COLS = [
+    "has_image",
+    "img_width",
+    "img_height",
+    "img_aspect_ratio",
+    "img_file_size_kb",
+    "img_mean_luminance",
+    "img_std_contrast",
+    "img_colorfulness",
+]
+
+
+def extract_visual_metadata_features(
+    df: pd.DataFrame,
+    image_dir: str,
+) -> pd.DataFrame:
+    """Extract lightweight visual properties from downloaded product images.
+
+    Extracts:
+        - has_image: 1.0 if image exists, readable, and > 1KB, else 0.0
+        - img_width: image width in pixels (log1p scaled)
+        - img_height: image height in pixels (log1p scaled)
+        - img_aspect_ratio: width / height
+        - img_file_size_kb: file size in kilobytes (log1p scaled)
+        - img_mean_luminance: average normalized pixel brightness [0, 1]
+        - img_std_contrast: standard deviation of luminance (contrast)
+        - img_colorfulness: Hasler-Süsstrunk colorfulness metric
+
+    Args:
+        df: DataFrame containing 'sample_id'.
+        image_dir: Local directory containing '{sample_id}.jpg'.
+
+    Returns:
+        DataFrame with visual metadata columns aligned with input df.
+    """
+    n = len(df)
+    has_image = np.zeros(n, dtype=np.float32)
+    img_width = np.zeros(n, dtype=np.float32)
+    img_height = np.zeros(n, dtype=np.float32)
+    img_aspect_ratio = np.ones(n, dtype=np.float32)
+    img_file_size_kb = np.zeros(n, dtype=np.float32)
+    img_mean_luminance = np.zeros(n, dtype=np.float32)
+    img_std_contrast = np.zeros(n, dtype=np.float32)
+    img_colorfulness = np.zeros(n, dtype=np.float32)
+
+    try:
+        from PIL import Image
+    except ImportError:
+        Image = None
+
+    sample_ids = df["sample_id"].values
+
+    for idx, sid in enumerate(sample_ids):
+        img_path = os.path.join(image_dir, f"{sid}.jpg")
+        if not os.path.exists(img_path):
+            continue
+        try:
+            fsize = os.path.getsize(img_path)
+            if fsize <= 1024:
+                continue
+
+            if Image is not None:
+                with Image.open(img_path) as img:
+                    w, h = img.size
+                    has_image[idx] = 1.0
+                    img_width[idx] = np.log1p(float(w))
+                    img_height[idx] = np.log1p(float(h))
+                    img_aspect_ratio[idx] = float(w) / max(float(h), 1.0)
+                    img_file_size_kb[idx] = np.log1p(float(fsize) / 1024.0)
+
+                    # Compute color statistics on thumbnail
+                    thumb = img.convert("RGB").resize((64, 64), Image.Resampling.BILINEAR)
+                    arr = np.asarray(thumb, dtype=np.float32)
+
+                    # Luminance: standard ITU-R BT.601 conversion
+                    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+                    lum = 0.299 * r + 0.587 * g + 0.114 * b
+                    img_mean_luminance[idx] = float(np.mean(lum)) / 255.0
+                    img_std_contrast[idx] = float(np.std(lum)) / 128.0
+
+                    # Hasler-Süsstrunk colorfulness metric
+                    rg = np.abs(r - g)
+                    yb = np.abs(0.5 * (r + g) - b)
+                    rg_mean, rg_std = np.mean(rg), np.std(rg)
+                    yb_mean, yb_std = np.mean(yb), np.std(yb)
+                    std_root = np.sqrt(rg_std ** 2 + yb_std ** 2)
+                    mean_root = np.sqrt(rg_mean ** 2 + yb_mean ** 2)
+                    img_colorfulness[idx] = (std_root + 0.3 * mean_root) / 100.0
+            else:
+                has_image[idx] = 1.0
+                img_file_size_kb[idx] = np.log1p(float(fsize) / 1024.0)
+        except Exception:
+            # Corrupted image or read failure: safely zero-filled
+            continue
+
+    return pd.DataFrame({
+        "has_image": has_image,
+        "img_width": img_width,
+        "img_height": img_height,
+        "img_aspect_ratio": img_aspect_ratio,
+        "img_file_size_kb": img_file_size_kb,
+        "img_mean_luminance": img_mean_luminance,
+        "img_std_contrast": img_std_contrast,
+        "img_colorfulness": img_colorfulness,
+    }, index=df.index)
+
+
+def build_vision_svd_features(
+    train_vision_emb: np.ndarray,
+    test_vision_emb: Optional[np.ndarray] = None,
+    n_components: int = 32,
+    random_state: int = 42,
+) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    """Reduce high-dimensional vision embeddings via TruncatedSVD for GBDT ingestion.
+
+    Args:
+        train_vision_emb: (N, D_vision) numpy array.
+        test_vision_emb: Optional (M, D_vision) numpy array.
+        n_components: Number of principal visual components (default 32).
+        random_state: Seed for reproducibility.
+
+    Returns:
+        Tuple of (train_svd, test_svd).
+    """
+    from sklearn.decomposition import TruncatedSVD
+
+    n_comp = min(n_components, train_vision_emb.shape[1], train_vision_emb.shape[0])
+    svd = TruncatedSVD(n_components=n_comp, random_state=random_state)
+    train_svd = svd.fit_transform(train_vision_emb).astype(np.float32)
+    test_svd = svd.transform(test_vision_emb).astype(np.float32) if test_vision_emb is not None else None
+    return train_svd, test_svd
+
 
 def build_numeric_matrix(
     df: pd.DataFrame,
@@ -458,14 +591,22 @@ def build_numeric_matrix(
 def build_feature_matrix(
     text_features: csr_matrix,
     numeric_features: csr_matrix,
+    vision_svd_features: Optional[np.ndarray | csr_matrix] = None,
 ) -> csr_matrix:
-    """Combine text and numeric features into a single matrix.
+    """Combine text, numeric, and optional vision SVD features into a single matrix.
 
     Args:
         text_features: Sparse TF-IDF matrix.
         numeric_features: Sparse numeric feature matrix.
+        vision_svd_features: Optional dense or sparse vision SVD components.
 
     Returns:
         Combined sparse matrix.
     """
-    return hstack([text_features, numeric_features]).tocsr()
+    matrices = [text_features, numeric_features]
+    if vision_svd_features is not None:
+        if not isinstance(vision_svd_features, csr_matrix):
+            vision_svd_features = csr_matrix(vision_svd_features.astype(np.float32))
+        matrices.append(vision_svd_features)
+    return hstack(matrices).tocsr()
+

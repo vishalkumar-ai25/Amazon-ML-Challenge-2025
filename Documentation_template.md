@@ -73,9 +73,15 @@ We developed an end-to-end, reproducible machine learning pipeline to predict op
 - **Structured Field Extraction:** High-precision regular expressions extract canonical units (standardizing `fl oz`, `fl. oz`, `fluid ounce` to `fl_oz`; `ounce`, `oz` to `oz`; `pound`, `lb` to `lb`).
 - **Pack Multipliers:** Parsing of phrases like `pack of N`, `case of N`, `N count`, `set of N`.
 - **Pricing Indicators:** Binary signals for multi-packs, bulk sizes, and premium keyword attributes (`organic`, `gourmet`, `pro`, `premium`).
+- **Physical Scale Standardization:** Base unit normalization (`total_grams`, `total_ml`, `total_pieces`, and unified `std_quantity`).
+- **Visual Features:**
+  - **Foundation ViT Representations:** 768-dim Google SigLIP (`google/siglip-base-patch16-224`) and Meta DINOv2 (`facebook/dinov2-base`).
+  - **SVD Dimensionality Reduction:** 32 principal visual components injected into LightGBM and CatBoost.
+  - **Visual Metadata:** 8 lightweight properties (presence mask, dimensions, aspect ratio, file size, luminance, contrast, colorfulness).
 
 **Model Pipeline:**
-- **LightGBM:** Tree-based gradient booster with Huber loss for robust outlier handling. Early stopping on validation MAE.
+- **Multimodal Neural Pricing Adapter:** Text Projection MLP (256) + Gated Vision Projection (128) + Tabular Projection MLP (64) + Cross-Modal Gated Fusion + Differentiable SMAPE Loss. Dynamic presence masking prevents missing image bias.
+- **LightGBM:** Tree-based gradient booster with Huber loss on combined physical + TF-IDF + visual metadata + vision SVD features.
 - **CatBoost:** Oblivious decision trees trained with exact Mean Absolute Error loss.
 - **Ridge Regression:** L2-regularized linear model on sparse text representations providing orthogonal linear bias.
 
@@ -92,12 +98,13 @@ We developed an end-to-end, reproducible machine learning pipeline to predict op
 | Multimodal Neural Adapter (BGE-Large) | **50.37%** | Frozen 1024-dim foundation embeddings + Differentiable SMAPE |
 | LightGBM (127 leaves, Huber loss) | **49.18%** | 32-core parallel histogram booster on physical features |
 | Milestone 1 Blend (GBDTs only) | **49.13%** | 89.4% LightGBM + 10.6% CatBoost |
-| **Milestone 2 Foundation Blend (Nelder-Mead)** | **47.32%** | **59.2% LightGBM + 40.8% Neural Adapter (Best Generalization)** |
+| Milestone 2 Foundation Blend (Nelder-Mead) | **47.32%** | 59.2% LightGBM + 40.8% Neural Adapter |
+| **Milestone 3 Multimodal Vision Pipeline (Target)** | **< 42.0%** | **SigLIP / DINOv2 + BGE-large + Gated Adapter + SVD Vision GBDT Blend** |
 
 ---
 
 ## 5. Academic Integrity & Reproducibility
 
 - **Zero External Price Lookups:** No external web scraping, external APIs, or outside pricing databases were accessed. All training strictly utilized the provided `train.csv`.
-- **License & Parameter Bounds:** All utilized models and libraries (scikit-learn, LightGBM, CatBoost) are permissive MIT / Apache 2.0 open-source libraries under 8B parameters.
+- **License & Parameter Bounds:** All utilized models and libraries (scikit-learn, LightGBM, CatBoost, SigLIP, DINOv2, BGE-large) are permissive Apache 2.0 / MIT open-source models under 8B parameters.
 - **Reproducibility:** Seed fixed at `42` across cross-validation splits and booster initializations.

@@ -38,19 +38,34 @@ if [ -d "venv" ]; then
 fi
 
 echo -e "\n=== Step 1: Ensuring Deep Learning Dependencies are Present ==="
-pip install -q transformers sentence-transformers accelerate torch || true
+pip install -q transformers sentence-transformers accelerate torch torchvision pillow || true
 
-echo -e "\n=== Step 2: Extracting Pretrained Foundation Embeddings ==="
-# Extracts 1024-dim dense text representations using frozen BGE-large
-# (Change --model to 'Qwen/Qwen2.5-3B-Instruct' if you want a 3B LLM representation)
+echo -e "\n=== Step 2: Downloading Product Images (Concurrent & Resilient) ==="
+# Resumes automatically if images are already downloaded; verifies integrity
+python -m src.download_images \
+    --split both \
+    --workers 32
+
+echo -e "\n=== Step 3: Extracting Pretrained Text Embeddings (BGE-Large) ==="
 python -m src.extract_embeddings \
     --model "BAAI/bge-large-en-v1.5" \
     --batch_size $BATCH_SIZE \
-    --output_dir "data/embeddings"
+    --output_dir "data/embeddings" \
+    --text_only
 
-echo -e "\n=== Step 3: Running Foundation Adapter + GBDT 5-Fold Training ==="
+echo -e "\n=== Step 4: Extracting Pretrained Vision Embeddings (SigLIP Base) ==="
+# Extracts 768-dim normalized representations using Google SigLIP
+python -m src.extract_embeddings \
+    --vision_model "google/siglip-base-patch16-224" \
+    --batch_size $BATCH_SIZE \
+    --output_dir "data/embeddings" \
+    --vision_only
+
+echo -e "\n=== Step 5: Running Multimodal Adapter + Dual GBDTs 5-Fold Training ==="
 python -m src.gpu_train_foundation \
     --model_tag "bge_large_en_v1.5" \
+    --vision_tag "siglip_base_patch16_224" \
+    --image_dir "images" \
     --embeddings_dir "data/embeddings" \
     --epochs 35 \
     --batch_size 256 \
@@ -59,3 +74,4 @@ python -m src.gpu_train_foundation \
 echo -e "\n=== Training Complete! Submission File Verified ==="
 ls -lh dataset/test_out.csv
 head -n 5 dataset/test_out.csv
+

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Sequence
@@ -45,18 +46,35 @@ def is_permitted_url(url: object) -> bool:
         return False
 
 
+def is_image_valid(file_path: str) -> bool:
+    """Validate that file exists, is > 1KB, and passes image integrity check."""
+    if not os.path.exists(file_path) or os.path.getsize(file_path) <= 1024:
+        return False
+    try:
+        from PIL import Image
+        with Image.open(file_path) as img:
+            img.verify()
+        return True
+    except Exception:
+        return False
+
+
 def download_single_image(
     image_url: str,
     save_path: str,
     *,
     timeout: int = 10,
+    retries: int = 2,
+    verify_integrity: bool = True,
 ) -> bool:
-    """Download a single image file using requests with scheme auditing.
+    """Download a single image file using requests with scheme auditing and retries.
 
     Args:
         image_url: URL to download from (must be http/https).
         save_path: Destination file path.
         timeout: Socket timeout in seconds.
+        retries: Number of retry attempts on transient network errors.
+        verify_integrity: Whether to verify image file validity using PIL.
 
     Returns:
         True if successfully downloaded or already exists, False on error.
@@ -64,27 +82,41 @@ def download_single_image(
     if not is_permitted_url(image_url):
         return False
 
-    # Check if valid file already exists (> 1KB)
-    if os.path.exists(save_path) and os.path.getsize(save_path) > 1024:
+    # Check if valid file already exists
+    if verify_integrity:
+        if is_image_valid(save_path):
+            return True
+    elif os.path.exists(save_path) and os.path.getsize(save_path) > 1024:
         return True
 
     temp_path = f"{save_path}.tmp"
-    try:
-        with requests.get(image_url, headers=HEADERS, timeout=timeout, stream=True) as response:
-            if response.status_code == 200:
-                with open(temp_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                os.replace(temp_path, save_path)
-                return True
-    except Exception:
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
-        return False
+    for attempt in range(retries + 1):
+        try:
+            with requests.get(image_url, headers=HEADERS, timeout=timeout, stream=True) as response:
+                if response.status_code == 200:
+                    with open(temp_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+
+                    if verify_integrity and not is_image_valid(temp_path):
+                        if os.path.exists(temp_path):
+                            try:
+                                os.remove(temp_path)
+                            except OSError:
+                                pass
+                        continue
+
+                    os.replace(temp_path, save_path)
+                    return True
+        except Exception:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+        if attempt < retries:
+            time.sleep(0.5 * (attempt + 1))
 
     return False
 
@@ -95,6 +127,8 @@ def download_dataset_images(
     *,
     max_workers: int = 32,
     limit: Optional[int] = None,
+    retries: int = 2,
+    verify_integrity: bool = True,
 ) -> dict[str, int]:
     """Download images for records in DataFrame concurrently.
 
@@ -106,6 +140,8 @@ def download_dataset_images(
         output_dir: Folder to save downloaded images.
         max_workers: Concurrent download threads.
         limit: Optional limit on number of images to download.
+        retries: Retries per image on network errors.
+        verify_integrity: Whether to verify image file integrity.
 
     Returns:
         Dictionary with count of successful and failed downloads.
@@ -126,7 +162,7 @@ def download_dataset_images(
             sample_id = rec["sample_id"]
             url = rec["image_link"]
             save_path = os.path.join(output_dir, f"{sample_id}.jpg")
-            tasks.append(executor.submit(download_single_image, url, save_path))
+            tasks.append(executor.submit(download_single_image, url, save_path, retries=retries, verify_integrity=verify_integrity))
 
         for future in tqdm(as_completed(tasks), total=len(tasks), desc="Downloading"):
             if future.result():
@@ -136,6 +172,26 @@ def download_dataset_images(
 
     print(f"Finished: {success} succeeded, {failed} failed.")
     return {"success": success, "failed": failed}
+
+
+def audit_downloaded_images(df: pd.DataFrame, output_dir: str) -> dict[str, int]:
+    """Audit status of downloaded images against a dataset DataFrame."""
+    sample_ids = df["sample_id"].values
+    total = len(sample_ids)
+    valid = 0
+    corrupt = 0
+    missing = 0
+
+    for sid in sample_ids:
+        path = os.path.join(output_dir, f"{sid}.jpg")
+        if not os.path.exists(path):
+            missing += 1
+        elif is_image_valid(path):
+            valid += 1
+        else:
+            corrupt += 1
+
+    return {"total": total, "valid": valid, "missing": missing, "corrupt": corrupt}
 
 
 def main():
@@ -158,10 +214,26 @@ def main():
         default=32,
         help="Number of download threads",
     )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="Audit downloaded images without downloading",
+    )
     args = parser.parse_args()
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dataset_dir = os.path.join(base_dir, "dataset")
+
+    if args.audit:
+        print("Auditing downloaded image status...")
+        for split in ["train", "test"]:
+            csv_path = os.path.join(dataset_dir, f"{split}.csv")
+            img_dir = os.path.join(base_dir, "images", split)
+            if os.path.exists(csv_path):
+                df = pd.read_csv(csv_path, usecols=["sample_id", "image_link"])
+                report = audit_downloaded_images(df, img_dir)
+                print(f"Split {split.upper()}: {report['valid']}/{report['total']} valid ({report['missing']} missing, {report['corrupt']} corrupt)")
+        return
 
     if args.split in ["train", "both"]:
         train_csv = os.path.join(dataset_dir, "train.csv")

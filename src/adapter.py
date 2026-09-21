@@ -70,10 +70,10 @@ if HAS_TORCH:
         """Lightweight neural adapter that fuses frozen text, vision, and tabular embeddings.
 
         Architecture:
-            Text Embeddings (e.g. 3584 / 1024 / 384 dim) -> Text Projection MLP (256)
-            Vision Embeddings (e.g. 768 / 1024 dim)     -> Vision Projection MLP (128) [Optional]
-            Tabular Features (e.g. 15 dim)              -> Tabular Projection MLP (64) [Optional]
-            Concatenation -> LayerNorm -> Fusion MLP (128) -> Output Linear (1) [ln(price)]
+            Text Embeddings (e.g. 1024 / 768 dim)     -> Text Projection MLP (256)
+            Vision Embeddings (e.g. 768 / 1152 dim)   -> Gated Vision Projection (128) [Optional]
+            Tabular Features (e.g. 25+ dim)           -> Tabular Projection MLP (64) [Optional]
+            Cross-Modal Gated Fusion -> LayerNorm -> Fusion MLP (128) -> Output Linear (1) [ln(price)]
         """
 
         def __init__(
@@ -97,7 +97,7 @@ if HAS_TORCH:
             )
             fusion_input_dim = hidden_dim
 
-            # Optional vision projection
+            # Optional vision projection with dynamic cross-modal gating
             if self.has_vision:
                 v_hidden = hidden_dim // 2
                 self.vision_proj = nn.Sequential(
@@ -105,6 +105,11 @@ if HAS_TORCH:
                     nn.LayerNorm(v_hidden),
                     nn.GELU(),
                     nn.Dropout(dropout),
+                )
+                # Cross-modal gate between text representation and vision representation
+                self.cross_gate = nn.Sequential(
+                    nn.Linear(hidden_dim + v_hidden, v_hidden),
+                    nn.Sigmoid(),
                 )
                 fusion_input_dim += v_hidden
 
@@ -137,7 +142,16 @@ if HAS_TORCH:
             reprs = [t_repr]
 
             if self.has_vision and vision_emb is not None:
-                reprs.append(self.vision_proj(vision_emb))
+                # Auto-detect vision presence mask: 1.0 if image features exist, 0.0 if missing/zero
+                v_norm = torch.norm(vision_emb, p=2, dim=-1, keepdim=True)
+                v_mask = (v_norm > 1e-4).float()
+
+                v_raw = self.vision_proj(vision_emb)
+                # Dynamic cross-modal gating: gates visual features based on multimodal relevance
+                gate_input = torch.cat([t_repr, v_raw], dim=-1)
+                v_gate = self.cross_gate(gate_input) * v_mask
+                v_repr = v_raw * v_gate
+                reprs.append(v_repr)
 
             if self.has_tabular and tabular_feat is not None:
                 reprs.append(self.tabular_proj(tabular_feat))
@@ -217,12 +231,30 @@ def train_adapter_cv(
     has_vision = vision_dim is not None
     has_tab = tabular_dim is not None
 
-    # Pre-convert test data to tensors
-    test_t_tensor = torch.from_numpy(test_text_emb.astype(np.float32)).to(device)
-    test_v_tensor = torch.from_numpy(test_vision_emb.astype(np.float32)).to(device) if has_vision else None
-    test_tab_tensor = torch.from_numpy(train_tabular.astype(np.float32)).to(device) if (has_tab and test_tabular is not None) else None
-
     criterion = DifferentiableSMAPELoss(predict_in_log=True)
+
+    def _predict_test_batched(model: nn.Module, eval_batch_size: int = 1024) -> np.ndarray:
+        """Evaluate test set in mini-batches to prevent GPU memory saturation."""
+        model.eval()
+        preds_list = []
+        with torch.no_grad():
+            for s_idx in range(0, n_test, eval_batch_size):
+                e_idx = min(s_idx + eval_batch_size, n_test)
+                b_text = torch.from_numpy(test_text_emb[s_idx:e_idx].astype(np.float32)).to(device)
+                b_vis = (
+                    torch.from_numpy(test_vision_emb[s_idx:e_idx].astype(np.float32)).to(device)
+                    if has_vision and test_vision_emb is not None
+                    else None
+                )
+                b_tab = (
+                    torch.from_numpy(test_tabular[s_idx:e_idx].astype(np.float32)).to(device)
+                    if has_tab and test_tabular is not None
+                    else None
+                )
+                pred_log = model(b_text, b_vis, b_tab)
+                pred_p = torch.exp(torch.clamp(pred_log, min=-2.5, max=9.0)).cpu().numpy()
+                preds_list.append(pred_p)
+        return np.concatenate(preds_list)
 
     for fold, (tr_idx, va_idx) in enumerate(cv_splits):
         t0 = time.time()
@@ -308,11 +340,8 @@ def train_adapter_cv(
         if verbose:
             print(f"  [Adapter] Fold {fold+1}/{len(cv_splits)} SMAPE: {best_val_smape:.2f}% ({time.time() - t0:.1f}s)")
 
-        # Predict test
-        model.eval()
-        with torch.no_grad():
-            test_pred_log = model(test_t_tensor, test_v_tensor, test_tab_tensor)
-            test_pred_price = torch.exp(torch.clamp(test_pred_log, min=-2.5, max=9.0)).cpu().numpy()
-            test_preds += test_pred_price / len(cv_splits)
+        # Predict test safely in mini-batches
+        fold_test_pred = _predict_test_batched(model, eval_batch_size=1024)
+        test_preds += fold_test_pred / len(cv_splits)
 
     return oof_preds, test_preds, fold_scores
