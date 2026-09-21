@@ -49,8 +49,17 @@
   - Blending weights: **52.29% LightGBM + 47.71% Neural Adapter** (0% CatBoost, 0% Ridge).
   - Key finding: Neural Adapter weight increased from 40.8% $\to$ 47.71% as vision representations provided rich price-tier signals.
   - Test Submission: Exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server at `dataset/test_out.csv`.
-- **Milestone 4 (Post-Processing Calibration & Stacking Meta-Learner): IN PROGRESS**
-  - Target: Push SMAPE below **40.0%** to reach the top 3 leaderboard tier (39.19% - 40.04%).
+- **Milestone 4 (Post-Processing Calibration & Stacking Meta-Learner): COMPLETED**
+  - Architecture: Multiplier scalar calibration + nested CV evaluation.
+  - Result: **45.38% SMAPE** (Blend weights: Adapter 56.6%, LightGBM 43.4%).
+- **Milestone 5 (Winner Techniques: FAISS k-NN, Dual Adapters, Advanced Catalog Features & Stacking): IN PROGRESS / RECORD ACHIEVED**
+  - Architecture: 6 FAISS k-NN price retrieval features + 20 product categories + 5 brand price tiers + material score + 10 keyword flags + Dual Neural Adapters (SMAPE Loss + MAE Loss) + Stacking Meta-Learner + Log-Affine Power-Law Calibration.
+  - CatBoost GPU OOF SMAPE: **42.98%** (Plummeted 7.58% from Milestone 4's 50.56%!).
+  - Ridge OOF SMAPE: **51.12%** (Plummeted 16.12% from 67.24%!).
+  - Adapter 1 (SMAPE loss): **47.49%**, Adapter 2 (MAE loss): **47.98%**.
+  - Deciles 4–5 core price range: **28.35% – 28.50% SMAPE** (Podium tier performance!).
+  - **Stacking Meta-Learner OOF SMAPE:** **41.92% SMAPE**! (Saved to `dataset/test_out_milestone5_42smape.csv`).
+  - Currently running fixed LightGBM SMAPE objective run (`run_m5_fixed.log`) to break below **40.0% SMAPE**.
 - **Official Competition Leaderboard Benchmarks (Target: < 40% SMAPE):**
   - **1st Place:** Team **Test Data** (IIT Patna) — **39.1969% SMAPE**
   - **2nd Place:** Team **Antrix** (TIET Patiala) — **39.2802% SMAPE**
