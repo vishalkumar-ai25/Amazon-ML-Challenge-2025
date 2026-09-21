@@ -50,6 +50,10 @@
     - 768-dim full representations passed to Multimodal Neural Pricing Adapter with Differentiable SMAPE Loss.
     - 32-dim TruncatedSVD components + 8 lightweight visual metadata features (`has_image`, dimensions, aspect ratio, file size, luminance, contrast, colorfulness) fed into LightGBM & CatBoost.
   - Turnkey remote orchestration via `./run_gpu_foundation.sh` on the RTX A4000 GPU server targeting **SMAPE < 42%**.
+- **Official Competition Leaderboard Benchmarks (Target: < 40% SMAPE):**
+  - **1st Place:** Team **Test Data** (IIT Patna) — **39.1969% SMAPE**
+  - **2nd Place:** Team **Antrix** (TIET Patiala) — **39.2802% SMAPE**
+  - **3rd Place:** Team **SPAM_LLMs** (IIT ISM Dhanbad) — **40.0401% SMAPE**
 
 ## 5. Repository Architecture & Directory Structure
 ```
@@ -68,6 +72,7 @@ Amazon-Ml-Prep/
 │   ├── test.csv               # 75,000 test records
 │   ├── sample_test.csv        # Sample input
 │   ├── sample_test_out.csv    # Sample output format
+│   ├── test_out_47_32_smape.csv # Verified Milestone 2 backup (47.32% SMAPE)
 │   └── test_out.csv           # Current verified predictions
 ├── src/
 │   ├── __init__.py
@@ -118,3 +123,21 @@ Amazon-Ml-Prep/
    - 8 visual metadata features: presence indicator, dimensions, aspect ratio, file size, luminance, contrast, colorfulness.
 5. **Stratified Price K-Fold CV:**
    - Quantile discretization ensures heavy-tailed price distribution ($0.13 to $2796) is equally represented across all 5 folds.
+
+## 7. Anti-Patterns & Critical Mistakes to Avoid (Codified Rules)
+1. **The Asymmetric Metric Trap (Raw Exponentiation):**
+   - *Never* output raw $\exp(\hat{y}_{\text{log}})$ without testing post-processing multiplier calibration ($\alpha^* \approx 0.94 - 1.04$) and floor clamping (`clip_min`). Because SMAPE divides by $(y + \hat{y})/2$, symmetric log loss induces an upward bias that post-hoc scaling corrects.
+   - *Rule:* Always fit global multiplier $\alpha$ via nested CV to avoid boundary cliff overfitting.
+2. **The Deterministic PPU Hazard (Hard Multiplication):**
+   - *Never* compute $\text{price} = \text{PPU} \times \text{extracted\_quantity}$. A single regex error (parsing a "6 ft cable" as quantity 6 on a $10 item) creates an output of $60, incurring a fatal 140%+ SMAPE penalty.
+   - *Rule:* Always treat `std_quantity` and `pack_qty` as non-linear input features into trees/adapters, or as multi-task auxiliary loss targets.
+3. **The Dense Feature Bottleneck in LightGBM:**
+   - *Never* feed dense continuous float embeddings (e.g. SVD components) into CPU LightGBM alongside sparse TF-IDF. This forces exhaustive 256-bin histogram scans on every tree split, tripling fold training time from 7 min to 25 min.
+   - *Rule:* Keep CPU LightGBM strictly on sparse CSR TF-IDF + structured physical tabular features. Assign dense embeddings to CatBoost GPU and PyTorch Neural Adapters.
+4. **Single-Threaded File/Image Processing:**
+   - *Never* iterate through 150,000 files in a single-threaded Python loop (e.g. PIL metadata extraction took 87 min).
+   - *Rule:* Always mandate `multiprocessing.Pool(N)` with chunked dispatches (`chunksize=256`). Always benchmark on 500 samples before launching across the full dataset.
+5. **Unbuffered Remote Shell Logging:**
+   - *Never* launch long background GPU training scripts without unbuffered stdout. Block buffering traps print statements for hours, causing black-box confusion.
+   - *Rule:* Always run with `python -u` or `PYTHONUNBUFFERED=1` and set `flush=True` in training loop prints.
+
