@@ -232,7 +232,7 @@ def main():
             reg_alpha=0.1,
             reg_lambda=1.0,
             random_state=42,
-            n_jobs=-1,
+            n_jobs=32,
             verbose=-1,
         )
         m_lgbm.fit(
