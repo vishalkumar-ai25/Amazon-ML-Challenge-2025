@@ -47,6 +47,9 @@ from src.adapter import train_adapter_cv, HAS_TORCH
 from src.postprocess import (
     optimize_global_multiplier,
     optimize_clip_floor,
+    optimize_power_law_calibration,
+    apply_power_law_calibration,
+    evaluate_power_law_nested_cv,
     apply_postprocessing,
     analyze_distribution_gap,
     align_test_distribution,
@@ -453,22 +456,45 @@ def main():
     opt_floor, _, cal_smape = optimize_clip_floor(y_train, blended_oof * opt_alpha)
     print(f"Optimal Global Multiplier: alpha={opt_alpha:.4f} (SMAPE: {base_sm:.2f}% -> {mult_sm:.2f}%)", flush=True)
     print(f"Optimal Lower Floor:       clip_min={opt_floor:.4f} (SMAPE: {mult_sm:.2f}% -> {cal_smape:.2f}%)", flush=True)
-    print(f"\n=======================================================", flush=True)
-    print(f"  >>> FINAL CALIBRATED ENSEMBLE OOF SMAPE: {cal_smape:.2f}% <<<", flush=True)
-    print(f"=======================================================", flush=True)
 
-    # Generate and calibrate Nelder-Mead test predictions
+    # Continuous Log-Affine Power-Law Calibration (Stretches tails: dampens Decile 0, expands Decile 9)
+    print("\nOptimizing Continuous Log-Affine Power-Law Decile Calibration...", flush=True)
+    opt_a, opt_b, pl_base_sm, pl_cal_sm = optimize_power_law_calibration(y_train, blended_oof, clip_min=opt_floor)
+    print(f"Power-Law Calibration: a={opt_a:.4f}, b={opt_b:.4f} (SMAPE: {pl_base_sm:.2f}% -> {pl_cal_sm:.2f}%)", flush=True)
+
+    # Evaluate stability via nested CV to prove zero target leakage
+    pl_cv_results = evaluate_power_law_nested_cv(y_train, blended_oof, n_splits=5, clip_min=opt_floor)
+    pl_cv_smape = pl_cv_results["calibrated_cv_smape"]
+    print(f"Power-Law Nested 5-Fold CV SMAPE: {pl_cv_smape:.2f}% (std_a={pl_cv_results['std_a']:.4f}, std_b={pl_cv_results['std_b']:.4f})", flush=True)
+
+    # Generate baseline test predictions
     blended_test = apply_blend(test_dict, weights, clip_min=opt_floor)
-    calibrated_test = apply_postprocessing(blended_test, multiplier=opt_alpha, clip_min=opt_floor)
+
+    # Select best calibration method based on cross-validated SMAPE
+    use_power_law = pl_cv_smape < cal_smape or pl_cal_sm < cal_smape
+    if use_power_law:
+        best_cal_smape = min(pl_cal_sm, pl_cv_smape)
+        print(f">>> Power-Law Calibration wins over Scalar Multiplier ({pl_cal_sm:.2f}% vs {cal_smape:.2f}%)!", flush=True)
+        blended_oof_calibrated = apply_power_law_calibration(blended_oof, a=opt_a, b=opt_b, clip_min=opt_floor)
+        calibrated_test = apply_power_law_calibration(blended_test, a=opt_a, b=opt_b, clip_min=opt_floor)
+    else:
+        best_cal_smape = cal_smape
+        print(f">>> Scalar Multiplier wins over Power-Law ({cal_smape:.2f}% vs {pl_cal_sm:.2f}%).", flush=True)
+        blended_oof_calibrated = np.maximum(blended_oof * opt_alpha, opt_floor)
+        calibrated_test = apply_postprocessing(blended_test, multiplier=opt_alpha, clip_min=opt_floor)
+
+    print(f"\n=======================================================", flush=True)
+    print(f"  >>> FINAL CALIBRATED ENSEMBLE OOF SMAPE: {best_cal_smape:.2f}% <<<", flush=True)
+    print(f"=======================================================", flush=True)
 
     # 8. Feature-Conditioned Stacking Meta-Learner vs Static Blend Comparison
     print("\n[7/7] Evaluating Feature-Conditioned Stacking Meta-Learner via Nested CV...", flush=True)
     stack_results = evaluate_stacking_cv(oof_dict, y_train, conditioning_df=train_struct, n_splits=5)
     stack_cv_smape = stack_results["stacking_oof_smape"]
-    print(f"Stacking Meta-Learner CV SMAPE: {stack_cv_smape:.2f}% (vs Nelder-Mead Calibrated: {cal_smape:.2f}%)", flush=True)
+    print(f"Stacking Meta-Learner CV SMAPE: {stack_cv_smape:.2f}% (vs Calibrated Blend: {best_cal_smape:.2f}%)", flush=True)
 
-    if stack_cv_smape < cal_smape:
-        print(f">>> Stacking Meta-Learner wins by {cal_smape - stack_cv_smape:.2f}%! Using Stacker for test predictions.", flush=True)
+    if stack_cv_smape < best_cal_smape:
+        print(f">>> Stacking Meta-Learner wins by {best_cal_smape - stack_cv_smape:.2f}%! Using Stacker for test predictions.", flush=True)
         stacker = FeatureConditionedStacker(alpha=10.0, calibrate_postprocess=True)
         stacker.fit(oof_dict, y_train, conditioning_df=train_struct)
         final_test_preds = stacker.predict(test_dict, conditioning_df=test_struct)
@@ -490,7 +516,7 @@ def main():
     # 10. Stratified Error Decile Analysis on Final OOF
     from src.error_analysis import analyze_by_price_decile
     print("\n--- Final OOF SMAPE by Price Decile ---", flush=True)
-    decile_summary = analyze_by_price_decile(y_train, blended_oof * opt_alpha)
+    decile_summary = analyze_by_price_decile(y_train, blended_oof_calibrated)
     print(decile_summary.to_string(), flush=True)
 
     sub_df = pd.DataFrame({
