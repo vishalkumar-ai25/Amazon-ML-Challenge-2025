@@ -43,13 +43,14 @@
   - **Optimal 4-Way Convex Blend (Nelder-Mead on SMAPE):** **47.32% SMAPE**!
   - Blending weights: **59.2% LightGBM + 40.8% Neural Adapter** (0% CatBoost, 0% Ridge).
   - Test Submission: Exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server.
-- **Milestone 3 (Multimodal Vision Features via SigLIP / DINOv2): IMPLEMENTED & VERIFIED**
-  - Architecture: Google SigLIP (`google/siglip-base-patch16-224`, 768-dim, Apache 2.0) + Meta DINOv2 (`facebook/dinov2-base`, Apache 2.0).
-  - Vision Presence Masking & Dynamic Cross-Modal Gating: Prevents missing-image zero-vector bias from distorting predictions, smoothly falling back to text+tabular representations.
-  - Dual Vision Signal Injection:
-    - 768-dim full representations passed to Multimodal Neural Pricing Adapter with Differentiable SMAPE Loss.
-    - 32-dim TruncatedSVD components + 8 lightweight visual metadata features (`has_image`, dimensions, aspect ratio, file size, luminance, contrast, colorfulness) fed into LightGBM & CatBoost.
-  - Turnkey remote orchestration via `./run_gpu_foundation.sh` on the RTX A4000 GPU server targeting **SMAPE < 42%**.
+- **Milestone 3 (Multimodal Vision Features via SigLIP): COMPLETED**
+  - Architecture: Google SigLIP (`google/siglip-base-patch16-224`, 768-dim, Apache 2.0) + Frozen BGE-large (1024-dim) + Multimodal Neural Adapter (Differentiable SMAPE Loss) with Dynamic Cross-Modal Gating + 32-dim SVD vision & 8 visual metadata features for GBDTs.
+  - **Optimal 4-Way Convex Blend (Nelder-Mead on SMAPE):** **45.10% SMAPE**! (A 2.22% absolute drop from Milestone 2's 47.32%).
+  - Blending weights: **52.29% LightGBM + 47.71% Neural Adapter** (0% CatBoost, 0% Ridge).
+  - Key finding: Neural Adapter weight increased from 40.8% $\to$ 47.71% as vision representations provided rich price-tier signals.
+  - Test Submission: Exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server at `dataset/test_out.csv`.
+- **Milestone 4 (Post-Processing Calibration & Stacking Meta-Learner): IN PROGRESS**
+  - Target: Push SMAPE below **40.0%** to reach the top 3 leaderboard tier (39.19% - 40.04%).
 - **Official Competition Leaderboard Benchmarks (Target: < 40% SMAPE):**
   - **1st Place:** Team **Test Data** (IIT Patna) — **39.1969% SMAPE**
   - **2nd Place:** Team **Antrix** (TIET Patiala) — **39.2802% SMAPE**

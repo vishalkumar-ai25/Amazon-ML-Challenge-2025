@@ -99,7 +99,8 @@ We developed an end-to-end, reproducible machine learning pipeline to predict op
 | LightGBM (127 leaves, Huber loss) | **49.18%** | 32-core parallel histogram booster on physical features |
 | Milestone 1 Blend (GBDTs only) | **49.13%** | 89.4% LightGBM + 10.6% CatBoost |
 | Milestone 2 Foundation Blend (Nelder-Mead) | **47.32%** | 59.2% LightGBM + 40.8% Neural Adapter |
-| **Milestone 3 Multimodal Vision Pipeline (Target)** | **< 42.0%** | **SigLIP / DINOv2 + BGE-large + Gated Adapter + SVD Vision GBDT Blend** |
+| **Milestone 3 Multimodal Vision Pipeline** | **45.10%** | **SigLIP-Base + BGE-Large + Gated Cross-Modal Adapter + SVD Vision GBDT Blend (52.3% LGBM + 47.7% Adapter)** |
+| **Milestone 4 Calibrated Stacking (Target)** | **< 40.0%** | **Post-processing multiplier calibration + Feature-conditioned Stacking Meta-Learner** |
 
 ---
 
