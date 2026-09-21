@@ -58,3 +58,18 @@ class TestPostprocessingCalibration:
         assert (calibrated >= 0.25).all()
         assert not np.isnan(calibrated).any()
         assert calibrated[0] == 0.25
+
+    def test_distribution_gap_and_alignment(self):
+        from src.postprocess import analyze_distribution_gap, align_test_distribution
+        train_p = np.array([5.0, 10.0, 15.0, 20.0, 50.0, 100.0, 250.0])
+        # Suppose model outputs compressed test predictions
+        test_p = np.array([12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0])
+        gap = analyze_distribution_gap(train_p, test_p)
+        assert "train" in gap and "test" in gap
+        assert gap["train"]["mean"] > 0
+        
+        aligned = align_test_distribution(test_p, train_p, blend_weight=0.2)
+        assert len(aligned) == len(test_p)
+        assert (aligned > 0).all()
+        # Rank preservation: aligned order should strictly match test_p order
+        assert (np.diff(aligned) > 0).all()

@@ -652,3 +652,91 @@ def build_feature_matrix(
         matrices.append(vision_svd_features)
     return hstack(matrices).tocsr()
 
+
+def extract_advanced_catalog_features(df: pd.DataFrame, brand_tiers: Optional[dict] = None) -> pd.DataFrame:
+    """Extract advanced catalog features including category, brand tier, and material score."""
+    result = df.copy()
+    
+    # 1. Product Category
+    categories = ['Electronics', 'Beauty', 'Grocery', 'Health', 'Home & Kitchen', 'Toys', 'Sports', 'Automotive', 'Clothing', 'Books', 'Pet Supplies', 'Baby', 'Office', 'Tools', 'Garden', 'Jewelry', 'Musical Instruments', 'Arts & Crafts', 'Industrial']
+    
+    def get_category(text):
+        if not isinstance(text, str):
+            return 'Other'
+        text_lower = text.lower()
+        for cat in categories:
+            if cat.lower() in text_lower:
+                return cat
+        return 'Other'
+        
+    result['product_category_str'] = result['catalog_content'].apply(get_category)
+    cat_map = {cat: i for i, cat in enumerate(categories + ['Other'])}
+    result['product_category'] = result['product_category_str'].map(cat_map)
+    result.drop(columns=['product_category_str'], inplace=True)
+    
+    # 2. Brand Tier
+    if 'brand' not in result.columns:
+        result['brand'] = result['catalog_content'].apply(lambda x: extract_brand(extract_field(x, "Item Name")))
+    
+    if brand_tiers is not None:
+        result['brand_price_tier'] = result['brand'].map(brand_tiers).fillna(2).astype(int)
+    elif 'price' in result.columns:
+        # Compute from training data
+        brand_median_price = result.groupby('brand')['price'].median()
+        quantiles = brand_median_price.quantile([0.2, 0.4, 0.6, 0.8]).to_dict()
+        def get_tier(price):
+            if pd.isna(price): return 2
+            if price <= quantiles.get(0.2, 0): return 0
+            if price <= quantiles.get(0.4, 0): return 1
+            if price <= quantiles.get(0.6, 0): return 2
+            if price <= quantiles.get(0.8, 0): return 3
+            return 4
+        computed_tiers = brand_median_price.apply(get_tier).to_dict()
+        result['brand_price_tier'] = result['brand'].map(computed_tiers).fillna(2).astype(int)
+        result.attrs['brand_tiers'] = computed_tiers
+    else:
+        # Test data without precomputed brand tiers - assign middle tier
+        result['brand_price_tier'] = 2
+        
+    # 3. Material Quality Score
+    premium_words = ['stainless steel', 'leather', 'organic', 'premium', 'professional', 'titanium', 'ceramic']
+    budget_words = ['plastic', 'synthetic', 'basic', 'value', 'economy', 'refill']
+    
+    def get_material_score(text):
+        if not isinstance(text, str): return 0
+        text_lower = text.lower()
+        prem_count = sum(text_lower.count(w) for w in premium_words)
+        budg_count = sum(text_lower.count(w) for w in budget_words)
+        return prem_count - budg_count
+        
+    result['material_quality_score'] = result['catalog_content'].apply(get_material_score)
+    
+    # 4. Price Keyword Flags
+    keywords = ['bulk', 'pack of', 'set of', 'bundle', 'refill', 'travel size', 'sample', 'mini', 'jumbo', 'family size']
+    
+    content_lower = result['catalog_content'].astype(str).str.lower()
+    for kw in keywords:
+        col_name = f'flag_{kw.replace(" ", "_")}'
+        result[col_name] = content_lower.str.contains(kw, regex=False).astype(int)
+        
+    return result
+
+
+def compute_iqr_training_mask(prices: np.ndarray | pd.Series, multiplier: float = 3.0) -> np.ndarray:
+    """Compute an IQR-based outlier mask on log(prices)."""
+    prices_arr = np.asarray(prices)
+    log_prices = np.log(prices_arr)
+    
+    q1 = np.percentile(log_prices, 25)
+    q3 = np.percentile(log_prices, 75)
+    iqr = q3 - q1
+    
+    lower_bound = q1 - multiplier * iqr
+    upper_bound = q3 + multiplier * iqr
+    
+    mask = (log_prices >= lower_bound) & (log_prices <= upper_bound)
+    removed = len(mask) - np.sum(mask)
+    print(f"Removed {removed} outliers based on log(price) IQR with multiplier {multiplier}", flush=True)
+    
+    return mask
+

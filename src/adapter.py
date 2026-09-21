@@ -177,6 +177,7 @@ def train_adapter_cv(
     weight_decay: float = 1e-4,
     device: Optional[str] = None,
     verbose: bool = True,
+    loss_type: str = "smape",
 ) -> tuple[np.ndarray, np.ndarray, list[float]]:
     """Train MultimodalPricingAdapter with K-Fold cross-validation on precomputed embeddings.
 
@@ -231,7 +232,12 @@ def train_adapter_cv(
     has_vision = vision_dim is not None
     has_tab = tabular_dim is not None
 
-    criterion = DifferentiableSMAPELoss(predict_in_log=True)
+    if loss_type == "mae":
+        criterion = nn.L1Loss()
+    elif loss_type == "huber":
+        criterion = nn.SmoothL1Loss(beta=0.5)
+    else:
+        criterion = DifferentiableSMAPELoss(predict_in_log=True)
 
     def _predict_test_batched(model: nn.Module, eval_batch_size: int = 1024) -> np.ndarray:
         """Evaluate test set in mini-batches to prevent GPU memory saturation."""
@@ -307,7 +313,11 @@ def train_adapter_cv(
                 b_y = batch[curr_idx].to(device)
 
                 pred_log = model(b_text, b_vision, b_tab)
-                loss = criterion(pred_log, b_y)
+                if loss_type in ("mae", "huber"):
+                    target_log = torch.log(torch.clamp(b_y, min=1e-3))
+                    loss = criterion(pred_log.squeeze(-1), target_log.squeeze(-1))
+                else:
+                    loss = criterion(pred_log, b_y)
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()

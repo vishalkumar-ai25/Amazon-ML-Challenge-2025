@@ -140,6 +140,63 @@ def calibrate_predictions_nested_cv(
     }
 
 
+def analyze_distribution_gap(
+    train_prices: np.ndarray,
+    test_preds: np.ndarray,
+) -> Dict[str, Dict[str, float]]:
+    """Compare summary statistics between training targets and test predictions.
+
+    Helps diagnose distribution compression or shift between validation and test.
+    """
+    tr = np.asarray(train_prices, dtype=np.float64)
+    te = np.asarray(test_preds, dtype=np.float64)
+
+    quantiles = [0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
+    return {
+        "train": {
+            "mean": float(np.mean(tr)),
+            "std": float(np.std(tr)),
+            "median": float(np.median(tr)),
+            **{f"q{int(q*100):02d}": float(np.quantile(tr, q)) for q in quantiles},
+        },
+        "test": {
+            "mean": float(np.mean(te)),
+            "std": float(np.std(te)),
+            "median": float(np.median(te)),
+            **{f"q{int(q*100):02d}": float(np.quantile(te, q)) for q in quantiles},
+        },
+    }
+
+
+def align_test_distribution(
+    test_preds: np.ndarray,
+    train_prices: np.ndarray,
+    blend_weight: float = 0.15,
+) -> np.ndarray:
+    """Gently align test prediction quantiles with empirical train price quantiles.
+
+    Preserves exact rank order of test predictions while adjusting for variance
+    compression common in log-trained regression models.
+
+    Args:
+        test_preds: Array of model test predictions.
+        train_prices: Array of ground-truth training prices.
+        blend_weight: Weight given to quantile mapping (0.0 = original, 1.0 = pure quantile mapping).
+
+    Returns:
+        Distribution-aligned positive price array.
+    """
+    te = np.asarray(test_preds, dtype=np.float64)
+    tr = np.asarray(train_prices, dtype=np.float64)
+
+    # Rank-preserving percentile mapping
+    percentiles = (np.argsort(np.argsort(te)) + 0.5) / len(te)
+    mapped_prices = np.quantile(tr, percentiles)
+
+    aligned = (1.0 - blend_weight) * te + blend_weight * mapped_prices
+    return np.maximum(aligned, 0.05)
+
+
 def apply_postprocessing(
     predictions: np.ndarray,
     multiplier: float = 1.0,

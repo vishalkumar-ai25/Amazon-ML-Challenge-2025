@@ -270,3 +270,24 @@ class TestAdvancedFeatures:
         assert "Size: 2 lb" in prompt
         assert "Multipack: two pack" in prompt
         assert "Specifications: Single origin dark roast" in prompt
+
+    def test_extract_advanced_catalog_features(self, sample_df):
+        from src.features import extract_advanced_catalog_features
+        sample_df['price'] = [10.0, 20.0, 250.0, 15.0]
+        res = extract_advanced_catalog_features(sample_df)
+        assert 'product_category' in res.columns
+        assert 'brand_price_tier' in res.columns
+        assert 'material_quality_score' in res.columns
+        assert 'flag_pack_of' in res.columns
+
+    def test_compute_iqr_training_mask(self):
+        from src.features import compute_iqr_training_mask
+        prices = np.ones(100) * 10.0
+        prices = np.append(prices, [0.00001, 100000.0])
+        mask = compute_iqr_training_mask(prices, multiplier=3.0)
+        
+        assert len(mask) == 102
+        assert not mask[-1]
+        assert not mask[-2]
+        assert mask[0]
+

@@ -17,6 +17,12 @@ from sklearn.linear_model import Ridge
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
+try:
+    import xgboost as xgb
+    HAS_XGB = True
+except ImportError:
+    HAS_XGB = False
+
 from src.metrics import smape
 from src.features import (
     extract_structured_features,
@@ -25,9 +31,13 @@ from src.features import (
     build_feature_matrix,
     extract_visual_metadata_features,
     build_vision_svd_features,
+    extract_advanced_catalog_features,
+    compute_iqr_training_mask,
     NUMERIC_COLS,
     VISUAL_METADATA_COLS,
 )
+from src.knn_features import build_knn_price_features
+from src.objectives import lgb_smape_objective, lgb_smape_eval
 from src.ensemble import (
     find_optimal_blend_weights,
     apply_blend,
@@ -38,6 +48,8 @@ from src.postprocess import (
     optimize_global_multiplier,
     optimize_clip_floor,
     apply_postprocessing,
+    analyze_distribution_gap,
+    align_test_distribution,
 )
 from src.stacking import (
     FeatureConditionedStacker,
@@ -54,6 +66,8 @@ def main():
     parser.add_argument("--epochs", type=int, default=35, help="Epochs for neural adapter per fold")
     parser.add_argument("--batch_size", type=int, default=256, help="Adapter mini-batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Adapter learning rate")
+    parser.add_argument("--train_mae_adapter", action="store_true", default=True, help="Train a second neural adapter with MAE loss for ensemble diversity")
+    parser.add_argument("--iqr_trim_multiplier", type=float, default=3.5, help="IQR multiplier for outlier trimming on training folds (0 to disable)")
     args = parser.parse_args()
 
     print("=" * 75)
@@ -106,8 +120,24 @@ def main():
     else:
         num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"]
 
-    X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
-    X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
+    # Advanced Catalog Features (Category, Brand Tier, Material Quality, Price Flags)
+    print("Extracting advanced catalog features (categories, brand tiers, material score, price flags)...", flush=True)
+    t_adv = time.time()
+    train_adv = extract_advanced_catalog_features(train_df)
+    brand_tiers = train_adv.attrs.get("brand_tiers")
+    test_adv = extract_advanced_catalog_features(test_df, brand_tiers=brand_tiers)
+
+    adv_cols = ["product_category", "brand_price_tier", "material_quality_score"] + [
+        c for c in train_adv.columns if c.startswith("flag_")
+    ]
+    for c in adv_cols:
+        train_struct[c] = train_adv[c]
+        test_struct[c] = test_adv[c]
+    num_cols += adv_cols
+    print(f"Advanced features extraction completed in {time.time() - t_adv:.1f}s ({len(adv_cols)} features added)", flush=True)
+
+    y_train = train_df["price"].values
+    y_log = np.log(np.maximum(y_train, 0.01))
 
     # 2. Check Foundation Embeddings (Text & Vision)
     train_emb_file = os.path.join(emb_dir, f"train_text_{args.model_tag}.npy")
@@ -130,6 +160,25 @@ def main():
         svd = TruncatedSVD(n_components=256, random_state=42)
         train_text_emb = svd.fit_transform(X_tfidf_tr).astype(np.float32)
         test_text_emb = svd.transform(X_tfidf_te).astype(np.float32)
+
+    # 3. Stratified K-Fold Cross Validation
+    print("\n[3/5] Setting up Stratified K-Fold based on price quantiles...", flush=True)
+    n_folds = 5
+    cv_splits = create_price_stratified_folds(y_train, n_folds=n_folds, seed=42)
+
+    # 3b. FAISS k-NN Price Neighbor Features (Leak-free OOF)
+    print("\nComputing FAISS k-NN Price Neighbor Features (leak-free OOF)...", flush=True)
+    t_knn = time.time()
+    knn_res = build_knn_price_features(train_text_emb, y_train, test_text_emb, cv_splits=cv_splits, k=5)
+    knn_cols = list(knn_res["train_features"].keys())
+    for col in knn_cols:
+        train_struct[col] = knn_res["train_features"][col]
+        test_struct[col] = knn_res["test_features"][col]
+    num_cols += knn_cols
+    print(f"k-NN price features computed in {time.time() - t_knn:.1f}s ({len(knn_cols)} features added)", flush=True)
+
+    X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
+    X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
 
     # Check for vision embeddings
     v_tag = args.vision_tag
@@ -166,7 +215,7 @@ def main():
     )
     X_text_test, _ = extract_text_features(test_struct["catalog_content"], vectorizer=tfidf)
 
-    # LightGBM: Strictly sparse CSR (TF-IDF + physical numerics) for 3x faster histogram splits
+    # LightGBM: Strictly sparse CSR (TF-IDF + physical numerics + knn) for 3x faster histogram splits
     X_train_lgbm = build_feature_matrix(X_text_train, X_num_train, vision_svd_features=None)
     X_test_lgbm = build_feature_matrix(X_text_test, X_num_test, vision_svd_features=None)
     print(f"LightGBM Sparse Feature Matrix Shape: {X_train_lgbm.shape}", flush=True)
@@ -175,14 +224,6 @@ def main():
     X_train_cat = build_feature_matrix(X_text_train, X_num_train, vision_svd_features=train_v_svd)
     X_test_cat = build_feature_matrix(X_text_test, X_num_test, vision_svd_features=test_v_svd)
     print(f"CatBoost GPU Feature Matrix Shape:    {X_train_cat.shape}", flush=True)
-
-    y_train = train_df["price"].values
-    y_log = np.log(np.maximum(y_train, 0.01))
-
-    # 3. Stratified K-Fold Cross Validation
-    print("\n[3/5] Setting up Stratified K-Fold based on price quantiles...", flush=True)
-    n_folds = 5
-    cv_splits = create_price_stratified_folds(y_train, n_folds=n_folds, seed=42)
 
     # 4. Train Multimodal Neural Pricing Adapter
     print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
@@ -198,17 +239,40 @@ def main():
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
+        loss_type="smape",
     )
-    print(f"\nOverall OOF Neural Adapter SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
+    print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
 
-    # 5. Train LightGBM & CatBoost on GBDT Features
+    oof_adapter_mae = None
+    test_adapter_mae = None
+    if args.train_mae_adapter:
+        print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
+        oof_adapter_mae, test_adapter_mae, _ = train_adapter_cv(
+            train_text_emb=train_text_emb,
+            y_train=y_train,
+            test_text_emb=test_text_emb,
+            train_vision_emb=train_vision_emb,
+            test_vision_emb=test_vision_emb,
+            train_tabular=X_num_train.toarray(),
+            test_tabular=X_num_test.toarray(),
+            cv_splits=cv_splits,
+            epochs=min(args.epochs, 25),
+            batch_size=args.batch_size,
+            lr=args.lr,
+            loss_type="mae",
+        )
+        print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
+
+    # 5. Train GBDT Models (LightGBM, CatBoost GPU, XGBoost GPU)
     oof_ridge = np.zeros(len(train_df))
     oof_lgbm = np.zeros(len(train_df))
     oof_cat = np.zeros(len(train_df))
+    oof_xgb = np.zeros(len(train_df)) if HAS_XGB else None
 
     test_ridge = np.zeros(len(test_df))
     test_lgbm = np.zeros(len(test_df))
     test_cat = np.zeros(len(test_df))
+    test_xgb = np.zeros(len(test_df)) if HAS_XGB else None
 
     catboost_task_type = "GPU"
     try:
@@ -219,12 +283,24 @@ def main():
         print("CatBoost GPU fallback to multi-threaded CPU.", flush=True)
         catboost_task_type = "CPU"
 
-    print("\nTraining GBDT Models (LightGBM & CatBoost) across folds...", flush=True)
+    if HAS_XGB:
+        print("XGBoost GPU acceleration detected and enabled!", flush=True)
+    else:
+        print("XGBoost not installed; proceeding with LightGBM + CatBoost.", flush=True)
+
+    print("\nTraining GBDT Models across folds...", flush=True)
     for fold, (t_idx, v_idx) in enumerate(cv_splits):
         print(f"\n--- Fold {fold + 1}/{n_folds} ---", flush=True)
-        X_tr_lgbm, y_tr_log = X_train_lgbm[t_idx], y_log[t_idx]
+        # Optional IQR outlier trimming on training folds (leaves validation folds 100% untouched)
+        if args.iqr_trim_multiplier > 0:
+            inlier_mask = compute_iqr_training_mask(y_train[t_idx], multiplier=args.iqr_trim_multiplier)
+            t_tr = t_idx[inlier_mask]
+        else:
+            t_tr = t_idx
+
+        X_tr_lgbm, y_tr_log = X_train_lgbm[t_tr], y_log[t_tr]
         X_va_lgbm, y_va_log = X_train_lgbm[v_idx], y_log[v_idx]
-        X_tr_cat = X_train_cat[t_idx]
+        X_tr_cat = X_train_cat[t_tr]
         X_va_cat = X_train_cat[v_idx]
         y_va_true = y_train[v_idx]
 
@@ -235,12 +311,11 @@ def main():
         oof_ridge[v_idx] = val_pred_ridge
         test_ridge += np.maximum(np.exp(m_ridge.predict(X_test_lgbm)), 0.01) / n_folds
 
-        # LightGBM (Huber Loss, on purely sparse features for 3x speedup)
+        # LightGBM: Trained directly with analytical SMAPE objective and evaluation
         m_lgbm = lgb.LGBMRegressor(
-            objective="huber",
-            metric="mae",
+            objective=lgb_smape_objective,
             n_estimators=1500,
-            learning_rate=0.06,
+            learning_rate=0.05,
             num_leaves=127,
             min_child_samples=40,
             feature_fraction=0.75,
@@ -260,7 +335,7 @@ def main():
         val_pred_lgbm = np.maximum(np.exp(m_lgbm.predict(X_va_lgbm)), 0.01)
         oof_lgbm[v_idx] = val_pred_lgbm
         test_lgbm += np.maximum(np.exp(m_lgbm.predict(X_test_lgbm)), 0.01) / n_folds
-        print(f"  [LightGBM] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_lgbm):.2f}%", flush=True)
+        print(f"  [LightGBM SMAPE] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_lgbm):.2f}%", flush=True)
 
         # CatBoost (MAE Loss, on dense SVD features via GPU)
         cb_kwargs = {
@@ -283,47 +358,93 @@ def main():
         test_cat += np.maximum(np.exp(m_cat.predict(X_test_cat)), 0.01) / n_folds
         print(f"  [CatBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_cat):.2f}%", flush=True)
 
+        # XGBoost GPU (if available)
+        if HAS_XGB:
+            xgb_kwargs = {
+                "n_estimators": 1000,
+                "learning_rate": 0.06,
+                "max_depth": 6,
+                "subsample": 0.8,
+                "colsample_bytree": 0.75,
+                "reg_alpha": 0.1,
+                "reg_lambda": 1.0,
+                "tree_method": "hist",
+                "device": "cuda" if catboost_task_type == "GPU" else "cpu",
+                "random_state": 42,
+                "early_stopping_rounds": 80,
+            }
+            m_xgb = xgb.XGBRegressor(**xgb_kwargs)
+            m_xgb.fit(X_tr_cat, y_tr_log, eval_set=[(X_va_cat, y_va_log)], verbose=200)
+            val_pred_xgb = np.maximum(np.exp(m_xgb.predict(X_va_cat)), 0.01)
+            oof_xgb[v_idx] = val_pred_xgb
+            test_xgb += np.maximum(np.exp(m_xgb.predict(X_test_cat)), 0.01) / n_folds
+            print(f"  [XGBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_xgb):.2f}%", flush=True)
+
     print("\n" + "=" * 75, flush=True)
-    print(f"Overall OOF Ridge SMAPE:         {smape(y_train, oof_ridge):.2f}%", flush=True)
-    print(f"Overall OOF LightGBM SMAPE:      {smape(y_train, oof_lgbm):.2f}%", flush=True)
-    print(f"Overall OOF CatBoost SMAPE:      {smape(y_train, oof_cat):.2f}%", flush=True)
-    print(f"Overall OOF Neural Adapter SMAPE:{smape(y_train, oof_adapter):.2f}%", flush=True)
+    print(f"Overall OOF Ridge SMAPE:               {smape(y_train, oof_ridge):.2f}%", flush=True)
+    print(f"Overall OOF LightGBM SMAPE:            {smape(y_train, oof_lgbm):.2f}%", flush=True)
+    print(f"Overall OOF CatBoost SMAPE:            {smape(y_train, oof_cat):.2f}%", flush=True)
+    if HAS_XGB:
+        print(f"Overall OOF XGBoost SMAPE:             {smape(y_train, oof_xgb):.2f}%", flush=True)
+    print(f"Overall OOF Neural Adapter (SMAPE):    {smape(y_train, oof_adapter):.2f}%", flush=True)
+    if oof_adapter_mae is not None:
+        print(f"Overall OOF Neural Adapter (MAE):      {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
 
     # Save OOF and test predictions for reproducible post-processing & stacking
     pred_dir = os.path.join(base_dir, "data", "predictions")
     os.makedirs(pred_dir, exist_ok=True)
-    np.savez_compressed(
-        os.path.join(pred_dir, "oof_predictions.npz"),
-        adapter=oof_adapter,
-        lgbm=oof_lgbm,
-        cat=oof_cat,
-        ridge=oof_ridge,
-        y_true=y_train,
-    )
-    np.savez_compressed(
-        os.path.join(pred_dir, "test_predictions.npz"),
-        adapter=test_adapter,
-        lgbm=test_lgbm,
-        cat=test_cat,
-        ridge=test_ridge,
-    )
+    save_oof_dict = {
+        "adapter_smape": oof_adapter,
+        "lgbm": oof_lgbm,
+        "cat": oof_cat,
+        "ridge": oof_ridge,
+        "y_true": y_train,
+    }
+    save_test_dict = {
+        "adapter_smape": test_adapter,
+        "lgbm": test_lgbm,
+        "cat": test_cat,
+        "ridge": test_ridge,
+    }
+    if oof_adapter_mae is not None:
+        save_oof_dict["adapter_mae"] = oof_adapter_mae
+        save_test_dict["adapter_mae"] = test_adapter_mae
+    if HAS_XGB:
+        save_oof_dict["xgb"] = oof_xgb
+        save_test_dict["xgb"] = test_xgb
+
+    np.savez_compressed(os.path.join(pred_dir, "oof_predictions.npz"), **save_oof_dict)
+    np.savez_compressed(os.path.join(pred_dir, "test_predictions.npz"), **save_test_dict)
     print(f"Saved OOF and test prediction matrices to: {pred_dir}", flush=True)
 
-    # 6. Out-of-Fold Nelder-Mead Blending
-    print("\n[5/5] Optimizing 4-Way Ensemble Weights via Nelder-Mead directly on SMAPE...", flush=True)
+    # 6. Out-of-Fold Nelder-Mead Blending across ALL Models
+    print("\n[5/5] Optimizing Multi-Model Ensemble Weights via Nelder-Mead directly on SMAPE...", flush=True)
     oof_dict = {
-        "adapter": oof_adapter,
+        "adapter_smape": oof_adapter,
         "lgbm": oof_lgbm,
         "cat": oof_cat,
         "ridge": oof_ridge,
     }
+    test_dict = {
+        "adapter_smape": test_adapter,
+        "lgbm": test_lgbm,
+        "cat": test_cat,
+        "ridge": test_ridge,
+    }
+    if oof_adapter_mae is not None:
+        oof_dict["adapter_mae"] = oof_adapter_mae
+        test_dict["adapter_mae"] = test_adapter_mae
+    if HAS_XGB and oof_xgb is not None:
+        oof_dict["xgb"] = oof_xgb
+        test_dict["xgb"] = test_xgb
+
     weights = find_optimal_blend_weights(oof_dict, y_train)
     print(f"Optimal Ensemble Weights: {weights}", flush=True)
 
     blended_oof = apply_blend(oof_dict, weights)
     final_smape = smape(y_train, blended_oof)
     print(f"\n=======================================================", flush=True)
-    print(f"  >>> 4-WAY BLENDED ENSEMBLE OOF SMAPE: {final_smape:.2f}% <<<", flush=True)
+    print(f"  >>> MULTI-MODEL BLENDED ENSEMBLE OOF SMAPE: {final_smape:.2f}% <<<", flush=True)
     print(f"=======================================================", flush=True)
 
     # 7. Post-Processing Multiplier & Floor Calibration
@@ -337,12 +458,6 @@ def main():
     print(f"=======================================================", flush=True)
 
     # Generate and calibrate Nelder-Mead test predictions
-    test_dict = {
-        "adapter": test_adapter,
-        "lgbm": test_lgbm,
-        "cat": test_cat,
-        "ridge": test_ridge,
-    }
     blended_test = apply_blend(test_dict, weights, clip_min=opt_floor)
     calibrated_test = apply_postprocessing(blended_test, multiplier=opt_alpha, clip_min=opt_floor)
 
@@ -360,6 +475,23 @@ def main():
     else:
         print(">>> Static Calibrated Nelder-Mead Blend wins. Using Calibrated Blend for test predictions.", flush=True)
         final_test_preds = calibrated_test
+
+    # 9. Validation-Test Distribution Alignment Check
+    print("\n[8/8] Performing Validation-Test Distribution Alignment Check...", flush=True)
+    dist_gap = analyze_distribution_gap(y_train, final_test_preds)
+    print("Distribution Summary:")
+    print(f"  Train: Mean=${dist_gap['train']['mean']:.2f}, Median=${dist_gap['train']['median']:.2f}, Q95=${dist_gap['train']['q95']:.2f}, Std=${dist_gap['train']['std']:.2f}")
+    print(f"  Test:  Mean=${dist_gap['test']['mean']:.2f}, Median=${dist_gap['test']['median']:.2f}, Q95=${dist_gap['test']['q95']:.2f}, Std=${dist_gap['test']['std']:.2f}")
+
+    if dist_gap["test"]["std"] < 0.85 * dist_gap["train"]["std"]:
+        print("Detected variance compression in test predictions. Applying quantile distribution alignment (weight=0.10)...", flush=True)
+        final_test_preds = align_test_distribution(final_test_preds, y_train, blend_weight=0.10)
+
+    # 10. Stratified Error Decile Analysis on Final OOF
+    from src.error_analysis import analyze_by_price_decile
+    print("\n--- Final OOF SMAPE by Price Decile ---", flush=True)
+    decile_summary = analyze_by_price_decile(y_train, blended_oof * opt_alpha)
+    print(decile_summary.to_string(), flush=True)
 
     sub_df = pd.DataFrame({
         "sample_id": test_df["sample_id"],
