@@ -380,26 +380,9 @@ def main():
             print(f"Adapter cache read failed ({e}), training fresh...", flush=True)
 
     if not loaded_adapters:
-        print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
-        oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
-            train_text_emb=train_text_emb,
-            y_train=y_train,
-            test_text_emb=test_text_emb,
-            train_vision_emb=train_vision_emb,
-            test_vision_emb=test_vision_emb,
-            train_tabular=X_num_train.toarray(),
-            test_tabular=X_num_test.toarray(),
-            cv_splits=cv_splits,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            lr=args.lr,
-            loss_type="smape",
-        )
-        print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
-
-        if args.train_mae_adapter:
-            print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
-            oof_adapter_mae, test_adapter_mae, _ = train_adapter_cv(
+        if HAS_TORCH:
+            print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
+            oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
                 train_text_emb=train_text_emb,
                 y_train=y_train,
                 test_text_emb=test_text_emb,
@@ -408,22 +391,42 @@ def main():
                 train_tabular=X_num_train.toarray(),
                 test_tabular=X_num_test.toarray(),
                 cv_splits=cv_splits,
-                epochs=min(args.epochs, 25),
+                epochs=args.epochs,
                 batch_size=args.batch_size,
                 lr=args.lr,
-                loss_type="mae",
+                loss_type="smape",
             )
-            print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
+            print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
 
-        save_dict = {
-            "oof_adapter": oof_adapter,
-            "test_adapter": test_adapter,
-        }
-        if oof_adapter_mae is not None:
-            save_dict["oof_adapter_mae"] = oof_adapter_mae
-            save_dict["test_adapter_mae"] = test_adapter_mae
-        np.savez_compressed(adapter_cache_file, **save_dict)
-        print(f"Saved Neural Adapter predictions to cache: {adapter_cache_file}", flush=True)
+            if args.train_mae_adapter:
+                print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
+                oof_adapter_mae, test_adapter_mae, _ = train_adapter_cv(
+                    train_text_emb=train_text_emb,
+                    y_train=y_train,
+                    test_text_emb=test_text_emb,
+                    train_vision_emb=train_vision_emb,
+                    test_vision_emb=test_vision_emb,
+                    train_tabular=X_num_train.toarray(),
+                    test_tabular=X_num_test.toarray(),
+                    cv_splits=cv_splits,
+                    epochs=min(args.epochs, 25),
+                    batch_size=args.batch_size,
+                    lr=args.lr,
+                    loss_type="mae",
+                )
+                print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
+
+            save_dict = {
+                "oof_adapter": oof_adapter,
+                "test_adapter": test_adapter,
+            }
+            if oof_adapter_mae is not None:
+                save_dict["oof_adapter_mae"] = oof_adapter_mae
+                save_dict["test_adapter_mae"] = test_adapter_mae
+            np.savez_compressed(adapter_cache_file, **save_dict)
+            print(f"Saved Neural Adapter predictions to cache: {adapter_cache_file}", flush=True)
+        else:
+            print("\n[4/5] PyTorch not available in current environment, skipping Neural Pricing Adapter...", flush=True)
 
     # 5. Train GBDT Models (LightGBM, CatBoost GPU)
     oof_lgbm = np.zeros(len(train_df))
@@ -508,7 +511,8 @@ def main():
     print("\n" + "=" * 75, flush=True)
     print(f"Overall OOF LightGBM SMAPE:            {smape(y_train, oof_lgbm):.2f}%", flush=True)
     print(f"Overall OOF CatBoost SMAPE:            {smape(y_train, oof_cat):.2f}%", flush=True)
-    print(f"Overall OOF Neural Adapter (SMAPE):    {smape(y_train, oof_adapter):.2f}%", flush=True)
+    if oof_adapter is not None:
+        print(f"Overall OOF Neural Adapter (SMAPE):    {smape(y_train, oof_adapter):.2f}%", flush=True)
     if oof_adapter_mae is not None:
         print(f"Overall OOF Neural Adapter (MAE):      {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
 
@@ -516,16 +520,17 @@ def main():
     pred_dir = os.path.join(base_dir, "data", "predictions")
     os.makedirs(pred_dir, exist_ok=True)
     save_oof_dict = {
-        "adapter_smape": oof_adapter,
         "lgbm": oof_lgbm,
         "cat": oof_cat,
         "y_true": y_train,
     }
     save_test_dict = {
-        "adapter_smape": test_adapter,
         "lgbm": test_lgbm,
         "cat": test_cat,
     }
+    if oof_adapter is not None:
+        save_oof_dict["adapter_smape"] = oof_adapter
+        save_test_dict["adapter_smape"] = test_adapter
     if oof_adapter_mae is not None:
         save_oof_dict["adapter_mae"] = oof_adapter_mae
         save_test_dict["adapter_mae"] = test_adapter_mae
@@ -537,15 +542,16 @@ def main():
     # 6. Out-of-Fold Nelder-Mead Blending across ALL Active Models
     print("\n[5/5] Optimizing Multi-Model Ensemble Weights via Nelder-Mead directly on SMAPE...", flush=True)
     oof_dict = {
-        "adapter_smape": oof_adapter,
         "lgbm": oof_lgbm,
         "cat": oof_cat,
     }
     test_dict = {
-        "adapter_smape": test_adapter,
         "lgbm": test_lgbm,
         "cat": test_cat,
     }
+    if oof_adapter is not None:
+        oof_dict["adapter_smape"] = oof_adapter
+        test_dict["adapter_smape"] = test_adapter
     if oof_adapter_mae is not None:
         oof_dict["adapter_mae"] = oof_adapter_mae
         test_dict["adapter_mae"] = test_adapter_mae
