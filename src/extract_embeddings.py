@@ -242,17 +242,21 @@ def main():
             train_out_v = os.path.join(out_dir, f"train_vision_{v_tag}.npy")
             test_out_v = os.path.join(out_dir, f"test_vision_{v_tag}.npy")
 
-            if not os.path.exists(train_out_v) or not os.path.exists(test_out_v):
-                print(f"\n[Vision] Extracting vision embeddings using {v_model} (tag: {v_tag})...")
+            if not os.path.exists(train_out_v):
+                print(f"\n[Vision Train] Extracting train vision embeddings using {v_model} (tag: {v_tag})...")
                 train_v_emb = extract_vision_embeddings_hf(train_img_paths, model_name=v_model, batch_size=args.batch_size)
-                test_v_emb = extract_vision_embeddings_hf(test_img_paths, model_name=v_model, batch_size=args.batch_size)
-
                 np.save(train_out_v, train_v_emb)
-                np.save(test_out_v, test_v_emb)
                 print(f"Saved: {train_out_v} shape: {train_v_emb.shape}")
+            else:
+                print(f"Found existing cached train vision embeddings for {v_tag} in {out_dir}")
+
+            if not os.path.exists(test_out_v):
+                print(f"\n[Vision Test] Extracting test vision embeddings using {v_model} (tag: {v_tag})...")
+                test_v_emb = extract_vision_embeddings_hf(test_img_paths, model_name=v_model, batch_size=args.batch_size)
+                np.save(test_out_v, test_v_emb)
                 print(f"Saved: {test_out_v} shape: {test_v_emb.shape}")
             else:
-                print(f"Found existing cached vision embeddings for {v_tag} in {out_dir}")
+                print(f"Found existing cached test vision embeddings for {v_tag} in {out_dir}")
 
     print("\nEmbedding extraction completed successfully!")
 
