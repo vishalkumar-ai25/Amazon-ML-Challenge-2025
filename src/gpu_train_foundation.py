@@ -391,16 +391,18 @@ def main():
         test_cat += np.maximum(np.exp(m_cat.predict(X_test_cat)), 0.01) / n_folds
         print(f"  [CatBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_cat):.2f}%", flush=True)
 
-        # XGBoost GPU (Depth-wise tree growth complements LightGBM's leaf-wise)
+        # XGBoost GPU (Depth-wise tree growth with MAE loss to match CatBoost and complement LightGBM)
         if HAS_XGB:
             xgb_kwargs = {
+                "objective": "reg:absoluteerror",
+                "eval_metric": "mae",
                 "n_estimators": 1200,
-                "learning_rate": 0.06,
+                "learning_rate": 0.05,
                 "max_depth": 6,
                 "subsample": 0.8,
-                "colsample_bytree": 0.75,
-                "reg_alpha": 0.1,
-                "reg_lambda": 1.0,
+                "colsample_bytree": 0.70,
+                "reg_alpha": 0.5,
+                "reg_lambda": 2.0,
                 "tree_method": "hist",
                 "device": "cuda" if catboost_task_type == "GPU" else "cpu",
                 "random_state": 42,
