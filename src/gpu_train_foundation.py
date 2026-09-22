@@ -13,14 +13,15 @@ import time
 import argparse
 import numpy as np
 import pandas as pd
-import lightgbm as lgb
-from catboost import CatBoostRegressor
+try:
+    import lightgbm as lgb
+except ImportError:
+    lgb = None
 
 try:
-    import xgboost as xgb
-    HAS_XGB = True
+    from catboost import CatBoostRegressor
 except ImportError:
-    HAS_XGB = False
+    CatBoostRegressor = None
 
 from src.metrics import smape
 from src.features import (
@@ -70,6 +71,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Adapter learning rate")
     parser.add_argument("--train_mae_adapter", action="store_true", default=True, help="Train a second neural adapter with MAE loss for ensemble diversity")
     parser.add_argument("--iqr_trim_multiplier", type=float, default=3.5, help="IQR multiplier for outlier trimming on training folds (0 to disable)")
+    parser.add_argument("--use_cached_adapters", action="store_true", default=False, help="Load cached neural adapter predictions if available")
     args = parser.parse_args()
 
     print("=" * 75)
@@ -130,7 +132,7 @@ def main():
     test_adv = extract_advanced_catalog_features(test_df, brand_tiers=brand_tiers)
 
     adv_cols = ["product_category", "brand_price_tier", "material_quality_score"] + [
-        c for c in train_adv.columns if c.startswith("flag_")
+        c for c in train_adv.columns if c.startswith("flag_") or c.startswith("is_")
     ]
     for c in adv_cols:
         train_struct[c] = train_adv[c]
@@ -267,28 +269,35 @@ def main():
     print(f"CatBoost GPU Feature Matrix Shape:    {X_train_cat.shape}", flush=True)
 
     # 4. Train Multimodal Neural Pricing Adapter
-    print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
-    oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
-        train_text_emb=train_text_emb,
-        y_train=y_train,
-        test_text_emb=test_text_emb,
-        train_vision_emb=train_vision_emb,
-        test_vision_emb=test_vision_emb,
-        train_tabular=X_num_train.toarray(),
-        test_tabular=X_num_test.toarray(),
-        cv_splits=cv_splits,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        loss_type="smape",
-    )
-    print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
+    # 4. Train or Load Multimodal Neural Pricing Adapter
+    adapter_cache_dir = os.path.join(base_dir, "data", "predictions")
+    os.makedirs(adapter_cache_dir, exist_ok=True)
+    v_tag_name = args.vision_tag or ("dual" if (siglip_tr and dinov2_tr) else "none")
+    adapter_cache_file = os.path.join(adapter_cache_dir, f"cached_adapters_{args.model_tag}_{v_tag_name}.npz")
 
-    oof_adapter_mae = None
-    test_adapter_mae = None
-    if args.train_mae_adapter:
-        print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
-        oof_adapter_mae, test_adapter_mae, _ = train_adapter_cv(
+    loaded_adapters = False
+    oof_adapter, test_adapter = None, None
+    oof_adapter_mae, test_adapter_mae = None, None
+
+    if args.use_cached_adapters and os.path.exists(adapter_cache_file):
+        print(f"\n[4/5] Loading precomputed Neural Adapter predictions from cache: {adapter_cache_file}...", flush=True)
+        try:
+            acache = np.load(adapter_cache_file)
+            oof_adapter = acache["oof_adapter"]
+            test_adapter = acache["test_adapter"]
+            if args.train_mae_adapter and "oof_adapter_mae" in acache:
+                oof_adapter_mae = acache["oof_adapter_mae"]
+                test_adapter_mae = acache["test_adapter_mae"]
+            print(f"Loaded OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
+            if oof_adapter_mae is not None:
+                print(f"Loaded OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
+            loaded_adapters = True
+        except Exception as e:
+            print(f"Adapter cache read failed ({e}), training fresh...", flush=True)
+
+    if not loaded_adapters:
+        print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
+        oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
             train_text_emb=train_text_emb,
             y_train=y_train,
             test_text_emb=test_text_emb,
@@ -297,21 +306,47 @@ def main():
             train_tabular=X_num_train.toarray(),
             test_tabular=X_num_test.toarray(),
             cv_splits=cv_splits,
-            epochs=min(args.epochs, 25),
+            epochs=args.epochs,
             batch_size=args.batch_size,
             lr=args.lr,
-            loss_type="mae",
+            loss_type="smape",
         )
-        print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
+        print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
 
-    # 5. Train GBDT Models (LightGBM, CatBoost GPU, XGBoost GPU)
+        if args.train_mae_adapter:
+            print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
+            oof_adapter_mae, test_adapter_mae, _ = train_adapter_cv(
+                train_text_emb=train_text_emb,
+                y_train=y_train,
+                test_text_emb=test_text_emb,
+                train_vision_emb=train_vision_emb,
+                test_vision_emb=test_vision_emb,
+                train_tabular=X_num_train.toarray(),
+                test_tabular=X_num_test.toarray(),
+                cv_splits=cv_splits,
+                epochs=min(args.epochs, 25),
+                batch_size=args.batch_size,
+                lr=args.lr,
+                loss_type="mae",
+            )
+            print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
+
+        save_dict = {
+            "oof_adapter": oof_adapter,
+            "test_adapter": test_adapter,
+        }
+        if oof_adapter_mae is not None:
+            save_dict["oof_adapter_mae"] = oof_adapter_mae
+            save_dict["test_adapter_mae"] = test_adapter_mae
+        np.savez_compressed(adapter_cache_file, **save_dict)
+        print(f"Saved Neural Adapter predictions to cache: {adapter_cache_file}", flush=True)
+
+    # 5. Train GBDT Models (LightGBM, CatBoost GPU)
     oof_lgbm = np.zeros(len(train_df))
     oof_cat = np.zeros(len(train_df))
-    oof_xgb = np.zeros(len(train_df)) if HAS_XGB else None
 
     test_lgbm = np.zeros(len(test_df))
     test_cat = np.zeros(len(test_df))
-    test_xgb = np.zeros(len(test_df)) if HAS_XGB else None
 
     catboost_task_type = "GPU"
     try:
@@ -321,11 +356,6 @@ def main():
     except Exception:
         print("CatBoost GPU fallback to multi-threaded CPU.", flush=True)
         catboost_task_type = "CPU"
-
-    if HAS_XGB:
-        print("XGBoost GPU acceleration detected and enabled!", flush=True)
-    else:
-        print("XGBoost not installed; proceeding with LightGBM + CatBoost.", flush=True)
 
     print("\nTraining GBDT Models across folds...", flush=True)
     for fold, (t_idx, v_idx) in enumerate(cv_splits):
@@ -391,35 +421,9 @@ def main():
         test_cat += np.maximum(np.exp(m_cat.predict(X_test_cat)), 0.01) / n_folds
         print(f"  [CatBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_cat):.2f}%", flush=True)
 
-        # XGBoost GPU (Depth-wise tree growth with MAE loss to match CatBoost and complement LightGBM)
-        if HAS_XGB:
-            xgb_kwargs = {
-                "objective": "reg:absoluteerror",
-                "eval_metric": "mae",
-                "n_estimators": 1200,
-                "learning_rate": 0.05,
-                "max_depth": 6,
-                "subsample": 0.8,
-                "colsample_bytree": 0.70,
-                "reg_alpha": 0.5,
-                "reg_lambda": 2.0,
-                "tree_method": "hist",
-                "device": "cuda" if catboost_task_type == "GPU" else "cpu",
-                "random_state": 42,
-                "early_stopping_rounds": 80,
-            }
-            m_xgb = xgb.XGBRegressor(**xgb_kwargs)
-            m_xgb.fit(X_tr_cat, y_tr_log, eval_set=[(X_va_cat, y_va_log)], verbose=200)
-            val_pred_xgb = np.maximum(np.exp(m_xgb.predict(X_va_cat)), 0.01)
-            oof_xgb[v_idx] = val_pred_xgb
-            test_xgb += np.maximum(np.exp(m_xgb.predict(X_test_cat)), 0.01) / n_folds
-            print(f"  [XGBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_xgb):.2f}%", flush=True)
-
     print("\n" + "=" * 75, flush=True)
     print(f"Overall OOF LightGBM SMAPE:            {smape(y_train, oof_lgbm):.2f}%", flush=True)
     print(f"Overall OOF CatBoost SMAPE:            {smape(y_train, oof_cat):.2f}%", flush=True)
-    if HAS_XGB and oof_xgb is not None:
-        print(f"Overall OOF XGBoost SMAPE:             {smape(y_train, oof_xgb):.2f}%", flush=True)
     print(f"Overall OOF Neural Adapter (SMAPE):    {smape(y_train, oof_adapter):.2f}%", flush=True)
     if oof_adapter_mae is not None:
         print(f"Overall OOF Neural Adapter (MAE):      {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
@@ -441,9 +445,6 @@ def main():
     if oof_adapter_mae is not None:
         save_oof_dict["adapter_mae"] = oof_adapter_mae
         save_test_dict["adapter_mae"] = test_adapter_mae
-    if HAS_XGB and oof_xgb is not None:
-        save_oof_dict["xgb"] = oof_xgb
-        save_test_dict["xgb"] = test_xgb
 
     np.savez_compressed(os.path.join(pred_dir, "oof_predictions.npz"), **save_oof_dict)
     np.savez_compressed(os.path.join(pred_dir, "test_predictions.npz"), **save_test_dict)
@@ -464,9 +465,6 @@ def main():
     if oof_adapter_mae is not None:
         oof_dict["adapter_mae"] = oof_adapter_mae
         test_dict["adapter_mae"] = test_adapter_mae
-    if HAS_XGB and oof_xgb is not None:
-        oof_dict["xgb"] = oof_xgb
-        test_dict["xgb"] = test_xgb
 
     weights = find_optimal_blend_weights(oof_dict, y_train)
     print(f"Optimal Ensemble Weights: {weights}", flush=True)

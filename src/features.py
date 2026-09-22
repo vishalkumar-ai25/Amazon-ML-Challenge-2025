@@ -337,20 +337,38 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
     # Derived features
     result["log_value"] = np.log1p(result["value_num"])
     result["log_pack_qty"] = np.log1p(result["pack_qty"])
-    result["unit_size"] = result["value_num"] / np.maximum(result["pack_qty"], 1.0)
-    result["log_unit_size"] = np.log1p(result["unit_size"])
-    result["total_quantity"] = result["value_num"] * result["pack_qty"]
+
+    # Resolve effective total quantity to prevent double-multiplication
+    # In Amazon catalog data, the 'Value' field is ALREADY the total package weight/volume
+    # in ~88% of multipacks. When unit is count, Value is already count.
+    # When val >= pack, val is already total package size (e.g. 288 oz for 48 pack of 6 oz).
+    # Only when val < pack (and not count) was per-unit size provided in Value field.
+    def _resolve_total_quantity(row: pd.Series) -> float:
+        val = float(row["value_num"])
+        pack = float(row["pack_qty"])
+        unit = str(row["unit_normalized"])
+        if pack <= 1.0:
+            return val
+        if unit == "count":
+            return max(val, pack)
+        if val >= pack:
+            return val
+        return val * pack
+
+    result["total_quantity"] = result.apply(_resolve_total_quantity, axis=1)
     result["log_total_quantity"] = np.log1p(result["total_quantity"])
+    result["unit_size"] = result["total_quantity"] / np.maximum(result["pack_qty"], 1.0)
+    result["log_unit_size"] = np.log1p(result["unit_size"])
 
     # Physical conversions (Standardized Base Units)
     result["total_grams"] = result.apply(
-        lambda r: convert_to_grams(r["value_num"] * r["pack_qty"], r["unit_normalized"]), axis=1
+        lambda r: convert_to_grams(r["total_quantity"], r["unit_normalized"]), axis=1
     )
     result["total_ml"] = result.apply(
-        lambda r: convert_to_ml(r["value_num"] * r["pack_qty"], r["unit_normalized"]), axis=1
+        lambda r: convert_to_ml(r["total_quantity"], r["unit_normalized"]), axis=1
     )
     result["total_pieces"] = result.apply(
-        lambda r: convert_to_pieces(r["value_num"] * r["pack_qty"], r["unit_normalized"]), axis=1
+        lambda r: convert_to_pieces(r["total_quantity"], r["unit_normalized"]), axis=1
     )
 
     result["log_total_grams"] = np.log1p(result["total_grams"])
@@ -723,6 +741,13 @@ def extract_advanced_catalog_features(df: pd.DataFrame, brand_tiers: Optional[di
     for kw in keywords:
         col_name = f'flag_{kw.replace(" ", "_")}'
         result[col_name] = content_lower.str.contains(kw, regex=False).astype(int)
+
+    # 5. Wholesale & Case Indicators (Addresses 190% SMAPE tail errors)
+    wholesale_terms = ["per case", "case of", "pallet", "carton of", "wholesale", "commercial"]
+    has_wholesale_kw = content_lower.apply(lambda text: int(any(w in text for w in wholesale_terms)))
+    is_large_pack = (result["pack_qty"] >= 24).astype(int) if "pack_qty" in result.columns else 0
+    result["is_wholesale_case"] = (has_wholesale_kw | is_large_pack).astype(int)
+    result["is_pallet"] = content_lower.str.contains("pallet", regex=False).astype(int)
         
     return result
 
