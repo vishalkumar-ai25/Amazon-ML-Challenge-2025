@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 
@@ -84,14 +85,32 @@ def validate_submission(
         missing = required_cols - set(df.columns)
         raise ValueError(f"Missing required column(s): {missing}")
 
+    # Check duplicate sample_ids
+    if df["sample_id"].duplicated().any():
+        dup_count = int(df["sample_id"].duplicated().sum())
+        raise ValueError(f"Found {dup_count} duplicate sample_id(s).")
+
+    # Enforce numeric type check
+    if pd.api.types.is_bool_dtype(df["price"]):
+        raise ValueError("Prices must be numeric floats.")
+    try:
+        prices = pd.to_numeric(df["price"], errors="raise")
+    except (ValueError, TypeError):
+        raise ValueError("Prices must be numeric floats.")
+
     # Check for NaN prices
-    if df["price"].isna().any():
-        nan_count = df["price"].isna().sum()
+    if prices.isna().any():
+        nan_count = int(prices.isna().sum())
         raise ValueError(f"Found {nan_count} NaN price(s). All prices must be valid.")
 
+    # Check for infinite prices
+    if np.isinf(prices).any():
+        inf_count = int(np.isinf(prices).sum())
+        raise ValueError(f"Found {inf_count} infinite price(s). All prices must be finite.")
+
     # Check positive prices
-    if (df["price"] <= 0).any():
-        neg_count = (df["price"] <= 0).sum()
+    if (prices <= 0).any():
+        neg_count = int((prices <= 0).sum())
         raise ValueError(
             f"Found {neg_count} non-positive price(s). All prices must be positive floats."
         )

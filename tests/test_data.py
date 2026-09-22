@@ -115,3 +115,22 @@ class TestValidation:
         bad_df = pd.DataFrame({"sample_id": [1, 2], "price": [10.0, float("nan")]})
         with pytest.raises(ValueError, match="NaN"):
             validate_submission(bad_df)
+
+    def test_validate_submission_rejects_infinite_prices(self):
+        from src.data import validate_submission
+        bad_df = pd.DataFrame({"sample_id": [1, 2], "price": [10.0, np.inf]})
+        with pytest.raises(ValueError, match="infinite"):
+            validate_submission(bad_df)
+
+    def test_validate_submission_rejects_duplicate_sample_ids(self):
+        from src.data import validate_submission
+        bad_df = pd.DataFrame({"sample_id": [1, 1], "price": [10.0, 20.0]})
+        with pytest.raises(ValueError, match="duplicate"):
+            validate_submission(bad_df)
+
+    def test_validate_submission_rejects_non_numeric_prices(self):
+        from src.data import validate_submission
+        bad_df = pd.DataFrame({"sample_id": [1, 2], "price": ["abc", "10.0"]})
+        with pytest.raises(ValueError, match="numeric"):
+            validate_submission(bad_df)
+

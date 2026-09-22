@@ -301,6 +301,10 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with structured columns and numeric indicators.
     """
     result = df.copy()
+    if "catalog_content" in result.columns:
+        result["catalog_content"] = result["catalog_content"].fillna("").astype(str)
+    else:
+        result["catalog_content"] = ""
 
     # Extract text fields
     result["item_name"] = result["catalog_content"].apply(
@@ -362,15 +366,15 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Bullet points and text length statistics
     result["num_bullets"] = result["catalog_content"].apply(count_bullet_points)
-    result["name_len"] = result["item_name"].str.len().fillna(0)
-    result["content_len"] = result["catalog_content"].str.len().fillna(0)
-    result["desc_len"] = result["description_raw"].str.len().fillna(0)
+    result["name_len"] = result["item_name"].astype(str).str.len().fillna(0)
+    result["content_len"] = result["catalog_content"].astype(str).str.len().fillna(0)
+    result["desc_len"] = result["description_raw"].astype(str).str.len().fillna(0)
 
     # Pricing keyword indicators
     content_lower = result["catalog_content"].str.lower()
-    result["is_multipack"] = content_lower.str.contains(r"\b(?:pack|set|case|box|bundle)\b", regex=True).astype(float)
-    result["is_premium"] = content_lower.str.contains(r"\b(?:organic|gourmet|pro|premium|luxury|collection)\b", regex=True).astype(float)
-    result["is_value_size"] = content_lower.str.contains(r"\b(?:refill|travel|mini|sample)\b", regex=True).astype(float)
+    result["is_multipack"] = content_lower.str.contains(r"\b(?:pack|set|case|box|bundle)\b", regex=True, na=False).astype(float)
+    result["is_premium"] = content_lower.str.contains(r"\b(?:organic|gourmet|pro|premium|luxury|collection)\b", regex=True, na=False).astype(float)
+    result["is_value_size"] = content_lower.str.contains(r"\b(?:refill|travel|mini|sample)\b", regex=True, na=False).astype(float)
 
     return result
 
@@ -400,8 +404,9 @@ def extract_text_features(
     Returns:
         Tuple of (sparse feature matrix, fitted TfidfVectorizer).
     """
+    clean_texts = pd.Series(texts).fillna("").astype(str)
     if vectorizer is not None:
-        X = vectorizer.transform(texts)
+        X = vectorizer.transform(clean_texts)
         return X, vectorizer
 
     vec = TfidfVectorizer(
@@ -411,7 +416,7 @@ def extract_text_features(
         stop_words="english",
         dtype=np.float32,
     )
-    X = vec.fit_transform(texts)
+    X = vec.fit_transform(clean_texts)
     return X, vec
 
 
