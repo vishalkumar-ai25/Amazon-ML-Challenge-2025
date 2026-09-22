@@ -91,8 +91,10 @@ def main():
     test_df = pd.read_csv(test_path)
 
     if args.subset is not None and args.subset < len(train_df):
-        print(f"\n>>> SUBSET BENCHMARK MODE: Subsetting train dataset to first {args.subset} samples <<<", flush=True)
+        print(f"\n>>> SUBSET BENCHMARK MODE: Subsetting train & test datasets to first {args.subset} samples <<<", flush=True)
         train_df = train_df.iloc[:args.subset].reset_index(drop=True)
+        if args.subset < len(test_df):
+            test_df = test_df.iloc[:args.subset].reset_index(drop=True)
 
     print(f"Train samples: {len(train_df)}, Test samples: {len(test_df)}")
 
@@ -158,9 +160,12 @@ def main():
         print(f"\n[2/5] Loading precomputed text foundation embeddings: {train_emb_file}...")
         train_text_emb = np.load(train_emb_file)
         test_text_emb = np.load(test_emb_file)
-        if args.subset is not None and args.subset < len(train_text_emb):
-            train_text_emb = train_text_emb[:args.subset]
-        print(f"Loaded text embeddings shape: {train_text_emb.shape}")
+        if args.subset is not None:
+            if args.subset < len(train_text_emb):
+                train_text_emb = train_text_emb[:args.subset]
+            if args.subset < len(test_text_emb):
+                test_text_emb = test_text_emb[:args.subset]
+        print(f"Loaded text embeddings shape: train={train_text_emb.shape}, test={test_text_emb.shape}")
     else:
         print(f"\n[2/5] Text foundation embeddings not found at {train_emb_file}!")
         print("Falling back to TruncatedSVD on TF-IDF for adapter input...")
@@ -172,8 +177,11 @@ def main():
         svd = TruncatedSVD(n_components=256, random_state=42)
         train_text_emb = svd.fit_transform(X_tfidf_tr).astype(np.float32)
         test_text_emb = svd.transform(X_tfidf_te).astype(np.float32)
-        if args.subset is not None and args.subset < len(train_text_emb):
-            train_text_emb = train_text_emb[:args.subset]
+        if args.subset is not None:
+            if args.subset < len(train_text_emb):
+                train_text_emb = train_text_emb[:args.subset]
+            if args.subset < len(test_text_emb):
+                test_text_emb = test_text_emb[:args.subset]
 
     # 3. Stratified K-Fold Cross Validation
     print("\n[3/5] Setting up Stratified K-Fold based on price quantiles...", flush=True)
@@ -261,8 +269,11 @@ def main():
 
         train_vision_emb = np.concatenate([tr_siglip, tr_dinov2], axis=1).astype(np.float32)
         test_vision_emb = np.concatenate([te_siglip, te_dinov2], axis=1).astype(np.float32)
-        if args.subset is not None and args.subset < len(train_vision_emb):
-            train_vision_emb = train_vision_emb[:args.subset]
+        if args.subset is not None:
+            if args.subset < len(train_vision_emb):
+                train_vision_emb = train_vision_emb[:args.subset]
+            if args.subset < len(test_vision_emb):
+                test_vision_emb = test_vision_emb[:args.subset]
         print(f"Dual vision embeddings fused: SigLIP ({tr_siglip.shape[1]}-dim) + DINOv2 ({tr_dinov2.shape[1]}-dim) -> {train_vision_emb.shape[1]}-dim", flush=True)
 
         print("Extracting 48-dim TruncatedSVD vision features from dual embeddings for GBDT models...", flush=True)
@@ -283,8 +294,11 @@ def main():
                 print(f"\n[Single Vision] Loading vision embeddings ({v_tag}): {tr_v_path}...", flush=True)
                 train_vision_emb = np.load(tr_v_path).astype(np.float32)
                 test_vision_emb = np.load(te_v_path).astype(np.float32)
-                if args.subset is not None and args.subset < len(train_vision_emb):
-                    train_vision_emb = train_vision_emb[:args.subset]
+                if args.subset is not None:
+                    if args.subset < len(train_vision_emb):
+                        train_vision_emb = train_vision_emb[:args.subset]
+                    if args.subset < len(test_vision_emb):
+                        test_vision_emb = test_vision_emb[:args.subset]
                 print(f"Vision embeddings shape: {train_vision_emb.shape}", flush=True)
 
                 print("Extracting 32-dim TruncatedSVD vision features for GBDT models...", flush=True)
