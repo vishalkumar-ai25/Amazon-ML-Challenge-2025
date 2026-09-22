@@ -2,8 +2,11 @@ import os
 import random
 import pandas as pd
 
+# Set deterministic seed for reproducibility
+random.seed(42)
+
 def predictor(sample_id, catalog_content, image_link):
-    '''
+    """
     Call your model/approach here
     
     Parameters:
