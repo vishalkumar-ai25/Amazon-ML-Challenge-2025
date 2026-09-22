@@ -72,6 +72,7 @@ def main():
     parser.add_argument("--train_mae_adapter", action="store_true", default=True, help="Train a second neural adapter with MAE loss for ensemble diversity")
     parser.add_argument("--iqr_trim_multiplier", type=float, default=3.5, help="IQR multiplier for outlier trimming on training folds (0 to disable)")
     parser.add_argument("--use_cached_adapters", action="store_true", default=False, help="Load cached neural adapter predictions if available")
+    parser.add_argument("--subset", type=int, default=None, help="Train and evaluate on a subset of N samples for fast benchmarking (e.g. 10000)")
     args = parser.parse_args()
 
     print("=" * 75)
@@ -88,6 +89,11 @@ def main():
     train_df = pd.read_csv(train_path)
     print(f"Loading test data: {test_path}")
     test_df = pd.read_csv(test_path)
+
+    if args.subset is not None and args.subset < len(train_df):
+        print(f"\n>>> SUBSET BENCHMARK MODE: Subsetting train dataset to first {args.subset} samples <<<", flush=True)
+        train_df = train_df.iloc[:args.subset].reset_index(drop=True)
+
     print(f"Train samples: {len(train_df)}, Test samples: {len(test_df)}")
 
     # 1. Physical & Structured Feature Extraction
@@ -152,6 +158,8 @@ def main():
         print(f"\n[2/5] Loading precomputed text foundation embeddings: {train_emb_file}...")
         train_text_emb = np.load(train_emb_file)
         test_text_emb = np.load(test_emb_file)
+        if args.subset is not None and args.subset < len(train_text_emb):
+            train_text_emb = train_text_emb[:args.subset]
         print(f"Loaded text embeddings shape: {train_text_emb.shape}")
     else:
         print(f"\n[2/5] Text foundation embeddings not found at {train_emb_file}!")
@@ -164,6 +172,8 @@ def main():
         svd = TruncatedSVD(n_components=256, random_state=42)
         train_text_emb = svd.fit_transform(X_tfidf_tr).astype(np.float32)
         test_text_emb = svd.transform(X_tfidf_te).astype(np.float32)
+        if args.subset is not None and args.subset < len(train_text_emb):
+            train_text_emb = train_text_emb[:args.subset]
 
     # 3. Stratified K-Fold Cross Validation
     print("\n[3/5] Setting up Stratified K-Fold based on price quantiles...", flush=True)
@@ -180,6 +190,34 @@ def main():
         test_struct[col] = knn_res["test_features"][col]
     num_cols += knn_cols
     print(f"k-NN price features computed in {time.time() - t_knn:.1f}s ({len(knn_cols)} features added)", flush=True)
+
+    # 3c. Empirical Bayes Out-of-Fold Target Encoding (Category & Brand)
+    print("\nComputing Empirical Bayes Out-of-Fold Target Encoding (Category & Brand)...", flush=True)
+    t_te = time.time()
+    train_struct["cat_oof_price"] = np.nan
+    train_struct["brand_oof_price"] = np.nan
+    test_struct["cat_oof_price"] = 0.0
+    test_struct["brand_oof_price"] = 0.0
+    global_mean_log = float(y_log.mean())
+
+    for t_idx, v_idx in cv_splits:
+        tr_df = train_df.iloc[t_idx]
+        cat_means = tr_df.groupby(train_struct.iloc[t_idx]["product_category"])["price"].apply(lambda s: np.log(s.clip(0.01)).mean())
+        train_struct.iloc[v_idx, train_struct.columns.get_loc("cat_oof_price")] = train_struct.iloc[v_idx]["product_category"].map(cat_means).fillna(global_mean_log)
+
+        brand_means = tr_df.groupby(train_struct.iloc[t_idx]["brand"])["price"].apply(lambda s: np.log(s.clip(0.01)).mean())
+        brand_counts = tr_df.groupby(train_struct.iloc[t_idx]["brand"])["price"].count()
+        smooth_brand = (brand_means * brand_counts + global_mean_log * 10) / (brand_counts + 10)
+        train_struct.iloc[v_idx, train_struct.columns.get_loc("brand_oof_price")] = train_struct.iloc[v_idx]["brand"].map(smooth_brand).fillna(global_mean_log)
+
+        test_cat_map = test_struct["product_category"].map(cat_means).fillna(global_mean_log)
+        test_brand_map = test_struct["brand"].map(smooth_brand).fillna(global_mean_log)
+        test_struct["cat_oof_price"] += test_cat_map / n_folds
+        test_struct["brand_oof_price"] += test_brand_map / n_folds
+
+    te_cols = ["cat_oof_price", "brand_oof_price"]
+    num_cols += te_cols
+    print(f"Target encoding completed in {time.time() - t_te:.1f}s ({len(te_cols)} features added)", flush=True)
 
     X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
     X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
@@ -223,6 +261,8 @@ def main():
 
         train_vision_emb = np.concatenate([tr_siglip, tr_dinov2], axis=1).astype(np.float32)
         test_vision_emb = np.concatenate([te_siglip, te_dinov2], axis=1).astype(np.float32)
+        if args.subset is not None and args.subset < len(train_vision_emb):
+            train_vision_emb = train_vision_emb[:args.subset]
         print(f"Dual vision embeddings fused: SigLIP ({tr_siglip.shape[1]}-dim) + DINOv2 ({tr_dinov2.shape[1]}-dim) -> {train_vision_emb.shape[1]}-dim", flush=True)
 
         print("Extracting 48-dim TruncatedSVD vision features from dual embeddings for GBDT models...", flush=True)
@@ -243,6 +283,8 @@ def main():
                 print(f"\n[Single Vision] Loading vision embeddings ({v_tag}): {tr_v_path}...", flush=True)
                 train_vision_emb = np.load(tr_v_path).astype(np.float32)
                 test_vision_emb = np.load(te_v_path).astype(np.float32)
+                if args.subset is not None and args.subset < len(train_vision_emb):
+                    train_vision_emb = train_vision_emb[:args.subset]
                 print(f"Vision embeddings shape: {train_vision_emb.shape}", flush=True)
 
                 print("Extracting 32-dim TruncatedSVD vision features for GBDT models...", flush=True)

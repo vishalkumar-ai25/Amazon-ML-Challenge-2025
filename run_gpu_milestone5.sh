@@ -50,6 +50,11 @@ fi
 echo ""
 echo "=== Launching Milestone 5 Training Pipeline ==="
 LOG_FILE="run_milestone5_$(date +%Y%m%d_%H%M%S).log"
+SUBSET_ARG=""
+if [ -n "$1" ]; then
+    SUBSET_ARG="--subset $1"
+    echo "=== Running in Fast Benchmark Mode: $1 Samples ==="
+fi
 
 python -u -m src.gpu_train_foundation \
     --model_tag bge_large_en_v1.5 \
@@ -61,6 +66,7 @@ python -u -m src.gpu_train_foundation \
     --lr 1e-3 \
     --train_mae_adapter \
     --iqr_trim_multiplier 3.5 \
+    $SUBSET_ARG \
     2>&1 | tee "$LOG_FILE"
 
 echo ""
