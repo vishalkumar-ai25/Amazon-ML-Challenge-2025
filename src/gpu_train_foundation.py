@@ -13,7 +13,6 @@ import time
 import argparse
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
@@ -170,9 +169,9 @@ def main():
     cv_splits = create_price_stratified_folds(y_train, n_folds=n_folds, seed=42)
 
     # 3b. FAISS k-NN Price Neighbor Features (Leak-free OOF)
-    print("\nComputing FAISS k-NN Price Neighbor Features (leak-free OOF)...", flush=True)
+    print("\nComputing FAISS k-NN Price Neighbor Features (leak-free OOF, k=10)...", flush=True)
     t_knn = time.time()
-    knn_res = build_knn_price_features(train_text_emb, y_train, test_text_emb, cv_splits=cv_splits, k=5)
+    knn_res = build_knn_price_features(train_text_emb, y_train, test_text_emb, cv_splits=cv_splits, k=10)
     knn_cols = list(knn_res["train_features"].keys())
     for col in knn_cols:
         train_struct[col] = knn_res["train_features"][col]
@@ -183,30 +182,69 @@ def main():
     X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
     X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
 
-    # Check for vision embeddings
-    v_tag = args.vision_tag
-    if v_tag is None:
-        for candidate in ["siglip_base", "dinov2_base", "siglip_base_patch16_224", "siglip"]:
-            if os.path.exists(os.path.join(emb_dir, f"train_vision_{candidate}.npy")):
-                v_tag = candidate
-                break
+    # Check for vision embeddings (supports SigLIP, DINOv2, or Dual Fusion)
+    siglip_candidates = ["siglip_base_patch16_224", "siglip_base", "siglip"]
+    dinov2_candidates = ["dinov2_base", "dinov2_base_patch14", "dinov2"]
+
+    siglip_tr = None
+    siglip_te = None
+    for cand in siglip_candidates:
+        tr_p = os.path.join(emb_dir, f"train_vision_{cand}.npy")
+        te_p = os.path.join(emb_dir, f"test_vision_{cand}.npy")
+        if os.path.exists(tr_p) and os.path.exists(te_p):
+            siglip_tr, siglip_te = tr_p, te_p
+            break
+
+    dinov2_tr = None
+    dinov2_te = None
+    for cand in dinov2_candidates:
+        tr_p = os.path.join(emb_dir, f"train_vision_{cand}.npy")
+        te_p = os.path.join(emb_dir, f"test_vision_{cand}.npy")
+        if os.path.exists(tr_p) and os.path.exists(te_p):
+            dinov2_tr, dinov2_te = tr_p, te_p
+            break
 
     train_vision_emb = None
     test_vision_emb = None
     train_v_svd = None
     test_v_svd = None
 
-    if v_tag:
-        tr_v_path = os.path.join(emb_dir, f"train_vision_{v_tag}.npy")
-        te_v_path = os.path.join(emb_dir, f"test_vision_{v_tag}.npy")
-        if os.path.exists(tr_v_path) and os.path.exists(te_v_path):
-            print(f"Loading vision embeddings ({v_tag}): {tr_v_path}...")
-            train_vision_emb = np.load(tr_v_path)
-            test_vision_emb = np.load(te_v_path)
-            print(f"Vision embeddings shape: {train_vision_emb.shape}")
+    want_dual = (args.vision_tag is None) or (args.vision_tag.lower() in ["dual", "both", "siglip+dinov2"])
+    if siglip_tr and dinov2_tr and want_dual:
+        print(f"\n[Dual Vision] Loading and fusing SigLIP + DINOv2...", flush=True)
+        print(f"  SigLIP: {siglip_tr}")
+        print(f"  DINOv2: {dinov2_tr}")
+        tr_siglip = np.load(siglip_tr)
+        te_siglip = np.load(siglip_te)
+        tr_dinov2 = np.load(dinov2_tr)
+        te_dinov2 = np.load(dinov2_te)
 
-            print("Extracting 32-dim SVD vision features for GBDT models...")
-            train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=32)
+        train_vision_emb = np.concatenate([tr_siglip, tr_dinov2], axis=1).astype(np.float32)
+        test_vision_emb = np.concatenate([te_siglip, te_dinov2], axis=1).astype(np.float32)
+        print(f"Dual vision embeddings fused: SigLIP ({tr_siglip.shape[1]}-dim) + DINOv2 ({tr_dinov2.shape[1]}-dim) -> {train_vision_emb.shape[1]}-dim", flush=True)
+
+        print("Extracting 48-dim TruncatedSVD vision features from dual embeddings for GBDT models...", flush=True)
+        train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=48)
+    else:
+        # Single vision embedding fallback or explicit vision_tag
+        v_tag = args.vision_tag
+        if v_tag is None:
+            if siglip_tr:
+                v_tag = os.path.basename(siglip_tr).replace("train_vision_", "").replace(".npy", "")
+            elif dinov2_tr:
+                v_tag = os.path.basename(dinov2_tr).replace("train_vision_", "").replace(".npy", "")
+
+        if v_tag:
+            tr_v_path = os.path.join(emb_dir, f"train_vision_{v_tag}.npy")
+            te_v_path = os.path.join(emb_dir, f"test_vision_{v_tag}.npy")
+            if os.path.exists(tr_v_path) and os.path.exists(te_v_path):
+                print(f"\n[Single Vision] Loading vision embeddings ({v_tag}): {tr_v_path}...", flush=True)
+                train_vision_emb = np.load(tr_v_path).astype(np.float32)
+                test_vision_emb = np.load(te_v_path).astype(np.float32)
+                print(f"Vision embeddings shape: {train_vision_emb.shape}", flush=True)
+
+                print("Extracting 32-dim TruncatedSVD vision features for GBDT models...", flush=True)
+                train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=32)
 
     # TF-IDF high-capacity representations for GBDT
     print("Building high-capacity TF-IDF matrix for GBDT models...")
@@ -267,12 +305,10 @@ def main():
         print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
 
     # 5. Train GBDT Models (LightGBM, CatBoost GPU, XGBoost GPU)
-    oof_ridge = np.zeros(len(train_df))
     oof_lgbm = np.zeros(len(train_df))
     oof_cat = np.zeros(len(train_df))
     oof_xgb = np.zeros(len(train_df)) if HAS_XGB else None
 
-    test_ridge = np.zeros(len(test_df))
     test_lgbm = np.zeros(len(test_df))
     test_cat = np.zeros(len(test_df))
     test_xgb = np.zeros(len(test_df)) if HAS_XGB else None
@@ -306,13 +342,6 @@ def main():
         X_tr_cat = X_train_cat[t_tr]
         X_va_cat = X_train_cat[v_idx]
         y_va_true = y_train[v_idx]
-
-        # Ridge linear anchor (on sparse features)
-        m_ridge = Ridge(alpha=1.5, random_state=42)
-        m_ridge.fit(X_tr_lgbm, y_tr_log)
-        val_pred_ridge = np.maximum(np.exp(m_ridge.predict(X_va_lgbm)), 0.01)
-        oof_ridge[v_idx] = val_pred_ridge
-        test_ridge += np.maximum(np.exp(m_ridge.predict(X_test_lgbm)), 0.01) / n_folds
 
         # LightGBM: Trained directly with analytical SMAPE objective and evaluation
         m_lgbm = lgb.LGBMRegressor(
@@ -362,10 +391,10 @@ def main():
         test_cat += np.maximum(np.exp(m_cat.predict(X_test_cat)), 0.01) / n_folds
         print(f"  [CatBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_cat):.2f}%", flush=True)
 
-        # XGBoost GPU (if available)
+        # XGBoost GPU (Depth-wise tree growth complements LightGBM's leaf-wise)
         if HAS_XGB:
             xgb_kwargs = {
-                "n_estimators": 1000,
+                "n_estimators": 1200,
                 "learning_rate": 0.06,
                 "max_depth": 6,
                 "subsample": 0.8,
@@ -385,10 +414,9 @@ def main():
             print(f"  [XGBoost] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_xgb):.2f}%", flush=True)
 
     print("\n" + "=" * 75, flush=True)
-    print(f"Overall OOF Ridge SMAPE:               {smape(y_train, oof_ridge):.2f}%", flush=True)
     print(f"Overall OOF LightGBM SMAPE:            {smape(y_train, oof_lgbm):.2f}%", flush=True)
     print(f"Overall OOF CatBoost SMAPE:            {smape(y_train, oof_cat):.2f}%", flush=True)
-    if HAS_XGB:
+    if HAS_XGB and oof_xgb is not None:
         print(f"Overall OOF XGBoost SMAPE:             {smape(y_train, oof_xgb):.2f}%", flush=True)
     print(f"Overall OOF Neural Adapter (SMAPE):    {smape(y_train, oof_adapter):.2f}%", flush=True)
     if oof_adapter_mae is not None:
@@ -401,19 +429,17 @@ def main():
         "adapter_smape": oof_adapter,
         "lgbm": oof_lgbm,
         "cat": oof_cat,
-        "ridge": oof_ridge,
         "y_true": y_train,
     }
     save_test_dict = {
         "adapter_smape": test_adapter,
         "lgbm": test_lgbm,
         "cat": test_cat,
-        "ridge": test_ridge,
     }
     if oof_adapter_mae is not None:
         save_oof_dict["adapter_mae"] = oof_adapter_mae
         save_test_dict["adapter_mae"] = test_adapter_mae
-    if HAS_XGB:
+    if HAS_XGB and oof_xgb is not None:
         save_oof_dict["xgb"] = oof_xgb
         save_test_dict["xgb"] = test_xgb
 
@@ -421,19 +447,17 @@ def main():
     np.savez_compressed(os.path.join(pred_dir, "test_predictions.npz"), **save_test_dict)
     print(f"Saved OOF and test prediction matrices to: {pred_dir}", flush=True)
 
-    # 6. Out-of-Fold Nelder-Mead Blending across ALL Models
+    # 6. Out-of-Fold Nelder-Mead Blending across ALL Active Models
     print("\n[5/5] Optimizing Multi-Model Ensemble Weights via Nelder-Mead directly on SMAPE...", flush=True)
     oof_dict = {
         "adapter_smape": oof_adapter,
         "lgbm": oof_lgbm,
         "cat": oof_cat,
-        "ridge": oof_ridge,
     }
     test_dict = {
         "adapter_smape": test_adapter,
         "lgbm": test_lgbm,
         "cat": test_cat,
-        "ridge": test_ridge,
     }
     if oof_adapter_mae is not None:
         oof_dict["adapter_mae"] = oof_adapter_mae
@@ -451,17 +475,11 @@ def main():
     print(f"  >>> MULTI-MODEL BLENDED ENSEMBLE OOF SMAPE: {final_smape:.2f}% <<<", flush=True)
     print(f"=======================================================", flush=True)
 
-    # 7. Post-Processing Multiplier & Floor Calibration
-    print("\n[6/6] Optimizing Post-Processing Multiplier & Floor directly on SMAPE...", flush=True)
-    opt_alpha, base_sm, mult_sm = optimize_global_multiplier(y_train, blended_oof)
-    opt_floor, _, cal_smape = optimize_clip_floor(y_train, blended_oof * opt_alpha)
-    print(f"Optimal Global Multiplier: alpha={opt_alpha:.4f} (SMAPE: {base_sm:.2f}% -> {mult_sm:.2f}%)", flush=True)
-    print(f"Optimal Lower Floor:       clip_min={opt_floor:.4f} (SMAPE: {mult_sm:.2f}% -> {cal_smape:.2f}%)", flush=True)
-
-    # Continuous Log-Affine Power-Law Calibration (Stretches tails: dampens Decile 0, expands Decile 9)
-    print("\nOptimizing Continuous Log-Affine Power-Law Decile Calibration...", flush=True)
+    # 7. Continuous Log-Affine Power-Law Decile Calibration (Locked in as Primary Post-Processor)
+    print("\n[6/6] Optimizing Continuous Log-Affine Power-Law Decile Calibration...", flush=True)
+    opt_floor, _, _ = optimize_clip_floor(y_train, blended_oof)
     opt_a, opt_b, pl_base_sm, pl_cal_sm = optimize_power_law_calibration(y_train, blended_oof, clip_min=opt_floor)
-    print(f"Power-Law Calibration: a={opt_a:.4f}, b={opt_b:.4f} (SMAPE: {pl_base_sm:.2f}% -> {pl_cal_sm:.2f}%)", flush=True)
+    print(f"Power-Law Calibration: a={opt_a:.4f}, b={opt_b:.4f}, floor={opt_floor:.4f} (SMAPE: {pl_base_sm:.2f}% -> {pl_cal_sm:.2f}%)", flush=True)
 
     # Evaluate stability via nested CV to prove zero target leakage
     pl_cv_results = evaluate_power_law_nested_cv(y_train, blended_oof, n_splits=5, clip_min=opt_floor)
@@ -471,22 +489,15 @@ def main():
     # Generate baseline test predictions
     blended_test = apply_blend(test_dict, weights, clip_min=opt_floor)
 
-    # Select best calibration method based on cross-validated SMAPE
-    use_power_law = pl_cv_smape < cal_smape or pl_cal_sm < cal_smape
-    if use_power_law:
-        best_cal_smape = min(pl_cal_sm, pl_cv_smape)
-        print(f">>> Power-Law Calibration wins over Scalar Multiplier ({pl_cal_sm:.2f}% vs {cal_smape:.2f}%)!", flush=True)
-        blended_oof_calibrated = apply_power_law_calibration(blended_oof, a=opt_a, b=opt_b, clip_min=opt_floor)
-        calibrated_test = apply_power_law_calibration(blended_test, a=opt_a, b=opt_b, clip_min=opt_floor)
-    else:
-        best_cal_smape = cal_smape
-        print(f">>> Scalar Multiplier wins over Power-Law ({cal_smape:.2f}% vs {pl_cal_sm:.2f}%).", flush=True)
-        blended_oof_calibrated = np.maximum(blended_oof * opt_alpha, opt_floor)
-        calibrated_test = apply_postprocessing(blended_test, multiplier=opt_alpha, clip_min=opt_floor)
+    # Lock in Power-Law Calibration as primary post-processing
+    best_cal_smape = pl_cal_sm
+    blended_oof_calibrated = apply_power_law_calibration(blended_oof, a=opt_a, b=opt_b, clip_min=opt_floor)
+    calibrated_test = apply_power_law_calibration(blended_test, a=opt_a, b=opt_b, clip_min=opt_floor)
 
     print(f"\n=======================================================", flush=True)
-    print(f"  >>> FINAL CALIBRATED ENSEMBLE OOF SMAPE: {best_cal_smape:.2f}% <<<", flush=True)
+    print(f"  >>> FINAL POWER-LAW CALIBRATED ENSEMBLE OOF SMAPE: {best_cal_smape:.2f}% <<<", flush=True)
     print(f"=======================================================", flush=True)
+
 
     # 8. Feature-Conditioned Stacking Meta-Learner vs Static Blend Comparison
     print("\n[7/7] Evaluating Feature-Conditioned Stacking Meta-Learner via Nested CV...", flush=True)

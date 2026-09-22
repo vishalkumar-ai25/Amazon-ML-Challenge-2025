@@ -231,26 +231,28 @@ def main():
         else:
             print(f"Found existing cached text embeddings in {out_dir}")
 
-    # 2. Vision embeddings (optional)
+    # 2. Vision embeddings (optional, supports single or comma-separated list like "google/siglip-base-patch16-224,facebook/dinov2-base")
     if args.vision_model and not args.text_only:
-        v_tag = clean_model_tag(args.vision_model)
-        train_out_v = os.path.join(out_dir, f"train_vision_{v_tag}.npy")
-        test_out_v = os.path.join(out_dir, f"test_vision_{v_tag}.npy")
-
         train_img_paths = [os.path.join(base_dir, args.image_dir, "train", f"{sid}.jpg") for sid in train_df["sample_id"]]
         test_img_paths = [os.path.join(base_dir, args.image_dir, "test", f"{sid}.jpg") for sid in test_df["sample_id"]]
 
-        if not os.path.exists(train_out_v) or not os.path.exists(test_out_v):
-            print(f"\n[Vision] Extracting vision embeddings using {args.vision_model}...")
-            train_v_emb = extract_vision_embeddings_hf(train_img_paths, model_name=args.vision_model, batch_size=args.batch_size)
-            test_v_emb = extract_vision_embeddings_hf(test_img_paths, model_name=args.vision_model, batch_size=args.batch_size)
+        vision_models = [m.strip() for m in args.vision_model.split(",") if m.strip()]
+        for v_model in vision_models:
+            v_tag = clean_model_tag(v_model)
+            train_out_v = os.path.join(out_dir, f"train_vision_{v_tag}.npy")
+            test_out_v = os.path.join(out_dir, f"test_vision_{v_tag}.npy")
 
-            np.save(train_out_v, train_v_emb)
-            np.save(test_out_v, test_v_emb)
-            print(f"Saved: {train_out_v} shape: {train_v_emb.shape}")
-            print(f"Saved: {test_out_v} shape: {test_v_emb.shape}")
-        else:
-            print(f"Found existing cached vision embeddings in {out_dir}")
+            if not os.path.exists(train_out_v) or not os.path.exists(test_out_v):
+                print(f"\n[Vision] Extracting vision embeddings using {v_model} (tag: {v_tag})...")
+                train_v_emb = extract_vision_embeddings_hf(train_img_paths, model_name=v_model, batch_size=args.batch_size)
+                test_v_emb = extract_vision_embeddings_hf(test_img_paths, model_name=v_model, batch_size=args.batch_size)
+
+                np.save(train_out_v, train_v_emb)
+                np.save(test_out_v, test_v_emb)
+                print(f"Saved: {train_out_v} shape: {train_v_emb.shape}")
+                print(f"Saved: {test_out_v} shape: {test_v_emb.shape}")
+            else:
+                print(f"Found existing cached vision embeddings for {v_tag} in {out_dir}")
 
     print("\nEmbedding extraction completed successfully!")
 

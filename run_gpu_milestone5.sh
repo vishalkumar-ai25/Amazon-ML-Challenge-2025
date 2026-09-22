@@ -53,7 +53,7 @@ LOG_FILE="run_milestone5_$(date +%Y%m%d_%H%M%S).log"
 
 python -u -m src.gpu_train_foundation \
     --model_tag bge_large_en_v1.5 \
-    --vision_tag siglip_base_patch16_224 \
+    --vision_tag dual \
     --image_dir images \
     --embeddings_dir data/embeddings \
     --epochs 35 \

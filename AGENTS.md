@@ -61,7 +61,9 @@
   - Uncalibrated 5-Way Blended Ensemble OOF SMAPE: **41.64%**.
   - **Final Calibrated Ensemble OOF SMAPE (Power-Law Calibration):** **41.48% SMAPE**! (Defeated scalar multiplier 41.62% and stacking meta-learner 41.67%).
   - Deciles 4–5 core price range: **28.35% – 28.50% SMAPE**!
-  - Test Submission: Exactly 75,000 verified positive float prices generated and validated at `dataset/test_out.csv`.
+- **Milestone 6 (Podium Leap: Drop Ridge, XGBoost GPU, Similarity-Weighted k-NN k=10, Dual Vision SigLIP+DINOv2): READY FOR REMOTE GPU TRAINING**
+  - Architecture: Complete removal of Ridge passenger + XGBoost GPU (1200 trees, depth 6, lr 0.06, hist tree method) for depth-wise tree diversity against LightGBM's leaf-wise trees + Expanded FAISS k-NN ($k=10$, `knn_weighted_mean_log_price` similarity weighting, `knn_price_spread`) + Dual Vision Embeddings (SigLIP 768-d + DINOv2 768-d concatenated to 1536-d, 48-d TruncatedSVD for GBDTs, full 1536-d dynamic adapter) + Locked-in Continuous Log-Affine Power-Law Decile Calibration as primary post-processor.
+  - Test Suite: 139 passed, 3 skipped (100% passing across all 13 test files).
 - **Official Competition Leaderboard Benchmarks (Target: < 40% SMAPE):**
   - **1st Place:** Team **Test Data** (IIT Patna) — **39.1969% SMAPE**
   - **2nd Place:** Team **Antrix** (TIET Patiala) — **39.2802% SMAPE**

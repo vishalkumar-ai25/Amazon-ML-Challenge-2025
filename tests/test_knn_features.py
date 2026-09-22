@@ -24,9 +24,22 @@ def test_knn_features_shapes():
     assert train_feats is not None
     assert test_feats is not None
     
-    for key in ['knn_mean_log_price', 'knn_median_log_price', 'knn_std_log_price', 'knn_min_log_price', 'knn_max_log_price', 'knn_mean_distance']:
+    for key in [
+        'knn_mean_log_price',
+        'knn_weighted_mean_log_price',
+        'knn_median_log_price',
+        'knn_std_log_price',
+        'knn_min_log_price',
+        'knn_max_log_price',
+        'knn_price_spread',
+        'knn_mean_distance',
+    ]:
+        assert key in train_feats
+        assert key in test_feats
         assert train_feats[key].shape == (N_train,)
         assert test_feats[key].shape == (N_test,)
+        assert not np.isnan(train_feats[key]).any()
+        assert not np.isnan(test_feats[key]).any()
 
 def test_knn_oof_leakage():
     # Test that OOF means it doesn't just return its own price as the nearest neighbor
@@ -67,3 +80,43 @@ def test_knn_k_greater_than_fold_size():
     
     assert train_feats['knn_mean_log_price'].shape == (N_train,)
     assert not np.isnan(train_feats['knn_mean_log_price']).any()
+    assert not np.isnan(train_feats['knn_weighted_mean_log_price']).any()
+    assert not np.isnan(train_feats['knn_price_spread']).any()
+
+
+def test_knn_weighted_mean_and_spread_properties():
+    """Verify similarity-weighted mean bounds and non-negative price spread."""
+    np.random.seed(42)
+    N_train = 40
+    N_test = 15
+    D = 16
+    
+    train_emb = np.random.randn(N_train, D).astype(np.float32)
+    train_prices = np.random.uniform(2.0, 500.0, size=N_train)
+    test_emb = np.random.randn(N_test, D).astype(np.float32)
+    
+    kf = KFold(n_splits=4, shuffle=True, random_state=42)
+    cv_splits = list(kf.split(train_emb))
+    
+    # Test default k=10
+    res = build_knn_price_features(train_emb, train_prices, test_emb, cv_splits)
+    tr_feats = res['train_features']
+    te_feats = res['test_features']
+    
+    # 1. Price spread must be strictly non-negative (max - min >= 0)
+    assert (tr_feats['knn_price_spread'] >= -1e-6).all(), "Train price spread must be >= 0"
+    assert (te_feats['knn_price_spread'] >= -1e-6).all(), "Test price spread must be >= 0"
+    
+    # 2. Weighted mean must lie within [min, max]
+    assert (tr_feats['knn_weighted_mean_log_price'] >= tr_feats['knn_min_log_price'] - 1e-6).all()
+    assert (tr_feats['knn_weighted_mean_log_price'] <= tr_feats['knn_max_log_price'] + 1e-6).all()
+    assert (te_feats['knn_weighted_mean_log_price'] >= te_feats['knn_min_log_price'] - 1e-6).all()
+    assert (te_feats['knn_weighted_mean_log_price'] <= te_feats['knn_max_log_price'] + 1e-6).all()
+    
+    # 3. Spread should equal max - min
+    np.testing.assert_allclose(
+        tr_feats['knn_price_spread'],
+        tr_feats['knn_max_log_price'] - tr_feats['knn_min_log_price'],
+        rtol=1e-5, atol=1e-6
+    )
+

@@ -71,7 +71,7 @@ if HAS_TORCH:
 
         Architecture:
             Text Embeddings (e.g. 1024 / 768 dim)     -> Text Projection MLP (256)
-            Vision Embeddings (e.g. 768 / 1152 dim)   -> Gated Vision Projection (128) [Optional]
+            Vision Embeddings (e.g. 768 / 1536 dim)   -> Gated Vision Projection (128) [Optional, supports Dual SigLIP + DINOv2]
             Tabular Features (e.g. 25+ dim)           -> Tabular Projection MLP (64) [Optional]
             Cross-Modal Gated Fusion -> LayerNorm -> Fusion MLP (128) -> Output Linear (1) [ln(price)]
         """

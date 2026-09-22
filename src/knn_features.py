@@ -28,7 +28,7 @@ def _search_knn(X_train, X_query, k_eff):
         similarities = 1.0 - distances
         return similarities, indices
 
-def build_knn_price_features(train_embeddings, train_prices, test_embeddings=None, cv_splits=None, k=5):
+def build_knn_price_features(train_embeddings, train_prices, test_embeddings=None, cv_splits=None, k=10):
     """
     Build k-NN features based on embeddings using OUT-OF-FOLD indexing to prevent data leakage.
     
@@ -37,7 +37,7 @@ def build_knn_price_features(train_embeddings, train_prices, test_embeddings=Non
         train_prices (np.ndarray): (N_train,) array of prices.
         test_embeddings (np.ndarray, optional): (N_test, D) array of embeddings for test data.
         cv_splits (list of tuples, optional): List of (train_idx, val_idx) tuples for OOF generation.
-        k (int): Number of nearest neighbors.
+        k (int): Number of nearest neighbors (default 10).
         
     Returns:
         dict: A dictionary containing the features for both train and test.
@@ -45,10 +45,12 @@ def build_knn_price_features(train_embeddings, train_prices, test_embeddings=Non
     train_n = train_embeddings.shape[0]
     train_features = {
         'knn_mean_log_price': np.zeros(train_n),
+        'knn_weighted_mean_log_price': np.zeros(train_n),
         'knn_median_log_price': np.zeros(train_n),
         'knn_std_log_price': np.zeros(train_n),
         'knn_min_log_price': np.zeros(train_n),
         'knn_max_log_price': np.zeros(train_n),
+        'knn_price_spread': np.zeros(train_n),
         'knn_mean_distance': np.zeros(train_n),
     }
     
@@ -61,41 +63,70 @@ def build_knn_price_features(train_embeddings, train_prices, test_embeddings=Non
             X_val = train_embeddings[val_idx]
             
             k_eff = min(k, len(train_idx))
-            distances, indices = _search_knn(X_train, X_val, k_eff)
+            similarities, indices = _search_knn(X_train, X_val, k_eff)
             
             # Gather prices
             neighbor_prices = y_train[indices]  # (len(val_idx), k_eff)
             
+            # Cosine similarity weights: w_i = max(s_i, 0.001) / sum(max(s_j, 0.001))
+            sim_weights = np.maximum(similarities, 0.001)
+            weight_sums = np.sum(sim_weights, axis=1, keepdims=True)
+            weights = sim_weights / np.maximum(weight_sums, 1e-9)
+            weighted_mean_prices = np.sum(weights * neighbor_prices, axis=1)
+
+            min_prices = np.min(neighbor_prices, axis=1)
+            max_prices = np.max(neighbor_prices, axis=1)
+            
             train_features['knn_mean_log_price'][val_idx] = np.mean(neighbor_prices, axis=1)
+            train_features['knn_weighted_mean_log_price'][val_idx] = weighted_mean_prices
             train_features['knn_median_log_price'][val_idx] = np.median(neighbor_prices, axis=1)
             train_features['knn_std_log_price'][val_idx] = np.std(neighbor_prices, axis=1)
-            train_features['knn_min_log_price'][val_idx] = np.min(neighbor_prices, axis=1)
-            train_features['knn_max_log_price'][val_idx] = np.max(neighbor_prices, axis=1)
-            train_features['knn_mean_distance'][val_idx] = np.mean(distances, axis=1)
+            train_features['knn_min_log_price'][val_idx] = min_prices
+            train_features['knn_max_log_price'][val_idx] = max_prices
+            train_features['knn_price_spread'][val_idx] = max_prices - min_prices
+            train_features['knn_mean_distance'][val_idx] = np.mean(similarities, axis=1)
+
+    for k_name in train_features:
+        assert not np.isnan(train_features[k_name]).any(), f"NaN found in train {k_name}"
             
     test_features = None
     if test_embeddings is not None:
         test_n = test_embeddings.shape[0]
         test_features = {
             'knn_mean_log_price': np.zeros(test_n),
+            'knn_weighted_mean_log_price': np.zeros(test_n),
             'knn_median_log_price': np.zeros(test_n),
             'knn_std_log_price': np.zeros(test_n),
             'knn_min_log_price': np.zeros(test_n),
             'knn_max_log_price': np.zeros(test_n),
+            'knn_price_spread': np.zeros(test_n),
             'knn_mean_distance': np.zeros(test_n),
         }
         
         k_eff = min(k, train_n)
-        distances, indices = _search_knn(train_embeddings, test_embeddings, k_eff)
+        similarities, indices = _search_knn(train_embeddings, test_embeddings, k_eff)
         
         neighbor_prices = log_prices[indices]
         
+        sim_weights = np.maximum(similarities, 0.001)
+        weight_sums = np.sum(sim_weights, axis=1, keepdims=True)
+        weights = sim_weights / np.maximum(weight_sums, 1e-9)
+        weighted_mean_prices = np.sum(weights * neighbor_prices, axis=1)
+
+        min_prices = np.min(neighbor_prices, axis=1)
+        max_prices = np.max(neighbor_prices, axis=1)
+        
         test_features['knn_mean_log_price'] = np.mean(neighbor_prices, axis=1)
+        test_features['knn_weighted_mean_log_price'] = weighted_mean_prices
         test_features['knn_median_log_price'] = np.median(neighbor_prices, axis=1)
         test_features['knn_std_log_price'] = np.std(neighbor_prices, axis=1)
-        test_features['knn_min_log_price'] = np.min(neighbor_prices, axis=1)
-        test_features['knn_max_log_price'] = np.max(neighbor_prices, axis=1)
-        test_features['knn_mean_distance'] = np.mean(distances, axis=1)
+        test_features['knn_min_log_price'] = min_prices
+        test_features['knn_max_log_price'] = max_prices
+        test_features['knn_price_spread'] = max_prices - min_prices
+        test_features['knn_mean_distance'] = np.mean(similarities, axis=1)
+
+        for k_name in test_features:
+            assert not np.isnan(test_features[k_name]).any(), f"NaN found in test {k_name}"
         
     return {
         'train_features': train_features,
