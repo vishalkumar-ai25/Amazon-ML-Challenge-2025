@@ -169,9 +169,16 @@ def main():
     # Load data
     train_path = os.path.join(base_dir, "dataset", "train.csv")
     train_df = pd.read_csv(train_path)
-    y_true = train_df["price"].values
     
     data = np.load(oof_path)
+    if "y_true" in data:
+        y_true = data["y_true"]
+    else:
+        y_true = train_df["price"].values
+
+    if len(train_df) != len(y_true):
+        train_df = train_df.iloc[:len(y_true)].reset_index(drop=True)
+
     available_keys = list(data.keys())
     print(f"\nAvailable OOF prediction keys: {available_keys}")
     
