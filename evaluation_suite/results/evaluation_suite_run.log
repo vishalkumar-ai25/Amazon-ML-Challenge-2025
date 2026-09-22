@@ -1,0 +1,597 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.1.1, pluggy-1.6.0 -- /home/ubuntu/venv-amzn/bin/python
+rootdir: /home/ubuntu/Amazon-ML-Challenge-2025
+plugins: cov-7.1.0
+collecting ... collected 351 items
+
+evaluation_suite/test_req01_output_format.py::TestSampleFilesAreChallengeCompliant::test_sample_files_exist PASSED [  0%]
+evaluation_suite/test_req01_output_format.py::TestSampleFilesAreChallengeCompliant::test_sample_out_has_exact_columns PASSED [  0%]
+evaluation_suite/test_req01_output_format.py::TestSampleFilesAreChallengeCompliant::test_sample_out_ids_match_sample_test PASSED [  0%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_header_matches_sample_exactly PASSED [  1%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_only_two_columns_and_no_index_column PASSED [  1%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_sample_id_is_integer_and_unique PASSED [  1%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_price_is_float_dtype PASSED [  1%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_prices_are_strictly_positive_and_finite PASSED [  2%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_row_count_matches_challenge_test_size PASSED [  2%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_price_range_is_plausible_for_ecommerce PASSED [  2%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_predictions_are_not_constant_or_random_baseline PASSED [  3%]
+evaluation_suite/test_req01_output_format.py::TestCommittedSubmissionFormat::test_ids_exactly_match_test_csv SKIPPED [  3%]
+evaluation_suite/test_req01_output_format.py::TestBackupSubmissionsAlsoCompliant::test_backup_file_is_valid[NOTSET] SKIPPED [  3%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionHappyPath::test_valid_submission_passes PASSED [  3%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionHappyPath::test_expected_count_matches PASSED [  4%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionHappyPath::test_tiny_positive_price_is_accepted PASSED [  4%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionHappyPath::test_extra_columns_are_tolerated PASSED [  4%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_zero_price_rejected PASSED [  5%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_negative_price_rejected PASSED [  5%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_nan_price_rejected PASSED [  5%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_missing_price_column_rejected PASSED [  5%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_missing_sample_id_column_rejected PASSED [  6%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_row_count_mismatch_rejected PASSED [  6%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_empty_submission_with_expected_count_rejected PASSED [  6%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_infinite_price_rejected FAILED [  7%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_duplicate_sample_ids_rejected FAILED [  7%]
+evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_non_numeric_price_raises_value_error FAILED [  7%]
+evaluation_suite/test_req02_submission_validation.py::TestSaveSubmission::test_writes_exact_two_columns_and_count PASSED [  7%]
+evaluation_suite/test_req02_submission_validation.py::TestSaveSubmission::test_negative_predictions_are_floored_to_positive PASSED [  8%]
+evaluation_suite/test_req02_submission_validation.py::TestSaveSubmission::test_length_mismatch_raises PASSED [  8%]
+evaluation_suite/test_req02_submission_validation.py::TestSaveSubmission::test_nan_predictions_raise_and_do_not_write PASSED [  8%]
+evaluation_suite/test_req02_submission_validation.py::TestInputSchemaLoading::test_load_train_and_test_from_valid_dir PASSED [  9%]
+evaluation_suite/test_req02_submission_validation.py::TestInputSchemaLoading::test_missing_files_raise_file_not_found PASSED [  9%]
+evaluation_suite/test_req02_submission_validation.py::TestInputSchemaLoading::test_missing_required_column_raises PASSED [  9%]
+evaluation_suite/test_req02_submission_validation.py::TestInputSchemaLoading::test_empty_csv_with_header_only_loads_zero_rows PASSED [  9%]
+evaluation_suite/test_req03_smape_metric.py::TestFormula::test_statement_worked_example PASSED [ 10%]
+evaluation_suite/test_req03_smape_metric.py::TestFormula::test_perfect_prediction_is_zero PASSED [ 10%]
+evaluation_suite/test_req03_smape_metric.py::TestFormula::test_symmetric_in_arguments PASSED [ 10%]
+evaluation_suite/test_req03_smape_metric.py::TestFormula::test_matches_reference_vectorised_formula PASSED [ 11%]
+evaluation_suite/test_req03_smape_metric.py::TestFormula::test_percentage_scale_not_fraction PASSED [ 11%]
+evaluation_suite/test_req03_smape_metric.py::TestBounds::test_upper_bound_200_when_prediction_is_far_off PASSED [ 11%]
+evaluation_suite/test_req03_smape_metric.py::TestBounds::test_never_exceeds_200_or_below_zero PASSED [ 11%]
+evaluation_suite/test_req03_smape_metric.py::TestBounds::test_scale_invariance PASSED [ 12%]
+evaluation_suite/test_req03_smape_metric.py::TestBounds::test_zero_prediction_does_not_produce_nan PASSED [ 12%]
+evaluation_suite/test_req03_smape_metric.py::TestBounds::test_both_zero_does_not_divide_by_zero PASSED [ 12%]
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_shape_mismatch_raises PASSED [ 13%]
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_accepts_lists_tuples_and_arrays PASSED [ 13%]
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_returns_python_float PASSED [ 13%]
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_empty_input_does_not_return_negative PASSED [ 13%]
+evaluation_suite/test_req03_smape_metric.py::TestConsistencyAcrossImplementations::test_per_sample_mean_equals_metric PASSED [ 14%]
+evaluation_suite/test_req03_smape_metric.py::TestConsistencyAcrossImplementations::test_lgb_eval_on_log_labels_matches_metric PASSED [ 14%]
+evaluation_suite/test_req03_smape_metric.py::TestConsistencyAcrossImplementations::test_xgb_eval_matches_metric PASSED [ 14%]
+evaluation_suite/test_req03_smape_metric.py::TestConsistencyAcrossImplementations::test_torch_loss_matches_metric_in_price_space PASSED [ 15%]
+evaluation_suite/test_req03_smape_metric.py::TestConsistencyAcrossImplementations::test_torch_loss_log_space_is_differentiable PASSED [ 15%]
+evaluation_suite/test_req03_smape_metric.py::TestConsistencyAcrossImplementations::test_objective_gradient_sign_and_hessian_positivity PASSED [ 15%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_named_fields PASSED [ 15%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_missing_field_returns_empty PASSED [ 16%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[None] PASSED [ 16%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[nan] PASSED [ 16%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[42] PASSED [ 17%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[3.5] PASSED [ 17%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[bytes] PASSED [ 17%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[bad5] PASSED [ 17%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_non_string_payload_returns_empty[bad6] PASSED [ 18%]
+evaluation_suite/test_req04_feature_engineering.py::TestFieldExtraction::test_field_name_with_regex_metachars_is_escaped PASSED [ 18%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[Pack of 6-6.0] PASSED [ 18%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[12 Pack-12.0] PASSED [ 19%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[24 count-24.0] PASSED [ 19%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[no pack info here-1.0] PASSED [ 19%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[-1.0] PASSED [ 19%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[None-1.0] PASSED [ 20%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_pack_quantity[nan-1.0] PASSED [ 20%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_length_units_are_not_mistaken_for_pack_quantity PASSED [ 20%]
+evaluation_suite/test_req04_feature_engineering.py::TestIPQAndPackQuantity::test_zero_pack_does_not_break_downstream_division PASSED [ 21%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unit_canonicalisation[Ounce-oz] PASSED [ 21%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unit_canonicalisation[OUNCES-oz] PASSED [ 21%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unit_canonicalisation[Fl Oz-fl_oz] PASSED [ 21%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unit_canonicalisation[fluid ounces-fl_oz] PASSED [ 22%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unit_canonicalisation[Pound-lb] PASSED [ 22%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unit_canonicalisation[lbs-lb] PASSED [ 22%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_unknown_unit_does_not_raise PASSED [ 23%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_weight_conversions PASSED [ 23%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_volume_conversions PASSED [ 23%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_count_conversion PASSED [ 23%]
+evaluation_suite/test_req04_feature_engineering.py::TestUnitsAndPhysicalConversions::test_conversions_are_linear_in_value PASSED [ 24%]
+evaluation_suite/test_req04_feature_engineering.py::TestBrandExtraction::test_single_token_brand PASSED [ 24%]
+evaluation_suite/test_req04_feature_engineering.py::TestBrandExtraction::test_article_prefixed_brand_keeps_two_tokens PASSED [ 24%]
+evaluation_suite/test_req04_feature_engineering.py::TestBrandExtraction::test_non_string_input PASSED [ 25%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_happy_path_values PASSED [ 25%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_nan_and_empty_catalog_do_not_raise_and_produce_finite_numerics PASSED [ 25%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_value_is_clipped_to_bounds PASSED [ 25%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_non_numeric_value_field_falls_back PASSED [ 26%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_row_order_and_count_preserved PASSED [ 26%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_advanced_features_are_numeric_and_finite PASSED [ 26%]
+evaluation_suite/test_req04_feature_engineering.py::TestStructuredFeatureMatrix::test_advanced_features_handle_nan_catalog PASSED [ 27%]
+evaluation_suite/test_req04_feature_engineering.py::TestPromptBuilder::test_number_to_words PASSED [ 27%]
+evaluation_suite/test_req04_feature_engineering.py::TestPromptBuilder::test_prompt_contains_name_size_and_pack PASSED [ 27%]
+evaluation_suite/test_req04_feature_engineering.py::TestPromptBuilder::test_prompt_for_empty_catalog_is_string PASSED [ 27%]
+evaluation_suite/test_req04_feature_engineering.py::TestPromptBuilder::test_structured_features_on_all_nan_catalog_column FAILED [ 28%]
+evaluation_suite/test_req04_feature_engineering.py::TestTextVectorisation::test_tfidf_fit_then_transform_shares_vocabulary PASSED [ 28%]
+evaluation_suite/test_req04_feature_engineering.py::TestTextVectorisation::test_tfidf_tolerates_nan_text FAILED [ 28%]
+evaluation_suite/test_req04_feature_engineering.py::TestTextVectorisation::test_feature_matrix_hstack_shapes PASSED [ 29%]
+evaluation_suite/test_req04_feature_engineering.py::TestTextVectorisation::test_vision_svd_is_fit_on_train_only PASSED [ 29%]
+evaluation_suite/test_req04_feature_engineering.py::TestOutlierHandling::test_iqr_mask_removes_extreme_log_price_outliers PASSED [ 29%]
+evaluation_suite/test_req04_feature_engineering.py::TestOutlierHandling::test_iqr_mask_keeps_everything_when_no_outliers PASSED [ 29%]
+evaluation_suite/test_req04_feature_engineering.py::TestOutlierHandling::test_iqr_mask_is_boolean PASSED [ 30%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestConfig::test_default_config_loads_and_has_required_keys PASSED [ 30%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestConfig::test_missing_config_raises PASSED [ 30%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestFeaturePreparation::test_shapes_align PASSED [ 31%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestFeaturePreparation::test_target_is_raw_price PASSED [ 31%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_ridge_cv_outputs PASSED [ 31%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_ridge_cv_is_deterministic PASSED [ 31%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_ridge_beats_constant_median_baseline PASSED [ 32%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs PASSED [ 32%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEndToEndSubmission::test_pipeline_from_csv_to_submission PASSED [ 32%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEndToEndSubmission::test_pipeline_with_single_test_row PASSED [ 33%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEndToEndSubmission::test_pipeline_survives_empty_and_nan_catalogs_in_test FAILED [ 33%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEnsembleAndFolds::test_blend_weights_are_convex PASSED [ 33%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEnsembleAndFolds::test_single_model_gets_weight_one PASSED [ 33%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEnsembleAndFolds::test_blend_never_below_clip_floor_and_ignores_unknown_weight PASSED [ 34%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEnsembleAndFolds::test_blend_of_positive_predictions_is_not_worse_than_worst PASSED [ 34%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEnsembleAndFolds::test_stratified_folds_are_a_partition PASSED [ 34%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestEnsembleAndFolds::test_stratified_folds_deterministic_under_seed PASSED [ 35%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestKnnFeaturesLeakageSafety::test_oof_knn_features_finite_and_do_not_contain_own_price PASSED [ 35%]
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestKnnFeaturesLeakageSafety::test_k_larger_than_train_size_is_capped PASSED [ 35%]
+evaluation_suite/test_req06_calibration_and_models.py::TestScalarCalibration::test_multiplier_does_not_worsen_smape PASSED [ 35%]
+evaluation_suite/test_req06_calibration_and_models.py::TestScalarCalibration::test_clip_floor_within_range PASSED [ 36%]
+evaluation_suite/test_req06_calibration_and_models.py::TestScalarCalibration::test_apply_postprocessing_positive_and_finite PASSED [ 36%]
+evaluation_suite/test_req06_calibration_and_models.py::TestScalarCalibration::test_apply_postprocessing_rejects_nan_input PASSED [ 36%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_identity_parameters_are_noop PASSED [ 37%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_preserves_rank_order PASSED [ 37%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_exponent_is_clamped_to_prevent_inversion PASSED [ 37%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_zero_and_negative_inputs_are_floored PASSED [ 37%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_optimizer_does_not_worsen_smape PASSED [ 38%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_distribution_alignment_is_rank_preserving_and_positive PASSED [ 38%]
+evaluation_suite/test_req06_calibration_and_models.py::TestPowerLawCalibration::test_alignment_zero_weight_is_identity PASSED [ 38%]
+evaluation_suite/test_req06_calibration_and_models.py::TestStacking::test_meta_features_shape_and_finiteness PASSED [ 39%]
+evaluation_suite/test_req06_calibration_and_models.py::TestStacking::test_meta_features_length_mismatch_is_rejected PASSED [ 39%]
+evaluation_suite/test_req06_calibration_and_models.py::TestStacking::test_stacker_predicts_positive_finite PASSED [ 39%]
+evaluation_suite/test_req06_calibration_and_models.py::TestNeuralAdapter::test_forward_shapes_text_only_and_multimodal PASSED [ 39%]
+evaluation_suite/test_req06_calibration_and_models.py::TestNeuralAdapter::test_zero_vision_vector_is_gated_out PASSED [ 40%]
+evaluation_suite/test_req06_calibration_and_models.py::TestNeuralAdapter::test_cv_training_emits_positive_predictions_for_every_test_row PASSED [ 40%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_http_https_permitted[https://m.media-amazon.com/images/I/71XfHPR36-L.jpg] PASSED [ 40%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_http_https_permitted[http://images.amazon.com/a.png] PASSED [ 41%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_http_https_permitted[  https://x.com/a.jpg  ] PASSED [ 41%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_http_https_permitted[HTTPS://UPPER.COM/x.jpg] PASSED [ 41%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[file:///etc/passwd] PASSED [ 41%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[ftp://host/img.jpg] PASSED [ 42%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[gopher://host/x] PASSED [ 42%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[javascript:alert(1)] PASSED [ 42%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[data:image/png;base64,AAAA] PASSED [ 43%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[//no-scheme.com/img.jpg] PASSED [ 43%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[https://] PASSED [ 43%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[http:///path-without-host] PASSED [ 43%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[] PASSED [ 44%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[   ] PASSED [ 44%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[None] PASSED [ 44%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[123] PASSED [ 45%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_non_http_or_malformed_rejected[https://bytes.com/x.jpg] PASSED [ 45%]
+evaluation_suite/test_req07_image_download_security.py::TestURLValidation::test_both_modules_agree_on_permitted_schemes PASSED [ 45%]
+evaluation_suite/test_req07_image_download_security.py::TestLegacyUtilsDownloader::test_download_image_writes_file_on_success PASSED [ 45%]
+evaluation_suite/test_req07_image_download_security.py::TestLegacyUtilsDownloader::test_download_image_skips_forbidden_scheme_without_network PASSED [ 46%]
+evaluation_suite/test_req07_image_download_security.py::TestLegacyUtilsDownloader::test_download_image_http_error_leaves_no_partial_file PASSED [ 46%]
+evaluation_suite/test_req07_image_download_security.py::TestLegacyUtilsDownloader::test_download_image_network_exception_is_swallowed PASSED [ 46%]
+evaluation_suite/test_req07_image_download_security.py::TestLegacyUtilsDownloader::test_download_image_is_idempotent PASSED [ 47%]
+evaluation_suite/test_req07_image_download_security.py::TestLegacyUtilsDownloader::test_download_images_creates_folder_and_dispatches PASSED [ 47%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_success_with_integrity_check PASSED [ 47%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_retries_on_throttling_then_succeeds PASSED [ 47%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_gives_up_after_retries_exhausted PASSED [ 48%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_corrupt_payload_rejected_by_integrity_check PASSED [ 48%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_forbidden_url_short_circuits PASSED [ 48%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_dataset_download_names_files_by_sample_id_and_counts PASSED [ 49%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_audit_reports_missing_corrupt_valid PASSED [ 49%]
+evaluation_suite/test_req07_image_download_security.py::TestResilientDownloader::test_is_image_valid_rejects_tiny_or_missing PASSED [ 49%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[configs/default.yaml] PASSED [ 49%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[notebooks/kaggle_amazon_ml_solution.ipynb] PASSED [ 50%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[run_gpu_foundation.sh] PASSED [ 50%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[run_gpu_milestone5.sh] PASSED [ 50%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[sample_code.py] PASSED [ 50%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/__init__.py] PASSED [ 51%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/adapter.py] PASSED [ 51%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/data.py] PASSED [ 51%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/download_data.py] PASSED [ 52%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/download_images.py] PASSED [ 52%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/eda.py] PASSED [ 52%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/ensemble.py] PASSED [ 52%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/error_analysis.py] PASSED [ 53%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/example.ipynb] PASSED [ 53%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/extract_embeddings.py] PASSED [ 53%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/features.py] PASSED [ 54%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/gpu_train.py] PASSED [ 54%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/gpu_train_foundation.py] PASSED [ 54%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/kaggle_pipeline.py] PASSED [ 54%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/knn_features.py] PASSED [ 55%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/metrics.py] PASSED [ 55%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/objectives.py] PASSED [ 55%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/postprocess.py] PASSED [ 56%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/stacking.py] PASSED [ 56%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/test_baseline.py] PASSED [ 56%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/train.py] PASSED [ 56%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[src/utils.py] PASSED [ 57%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/__init__.py] PASSED [ 57%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_adapter.py] PASSED [ 57%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_data.py] PASSED [ 58%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_ensemble.py] PASSED [ 58%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_features.py] PASSED [ 58%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_knn_features.py] PASSED [ 58%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_metrics.py] PASSED [ 59%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_objectives.py] PASSED [ 59%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_pipeline.py] PASSED [ 59%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_postprocess.py] PASSED [ 60%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_security_url.py] PASSED [ 60%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_stacking.py] PASSED [ 60%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_submission.py] PASSED [ 60%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_no_price_lookup_or_scraping_tooling[tests/test_vision.py] PASSED [ 61%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[__init__.py] PASSED [ 61%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[adapter.py] PASSED [ 61%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[data.py] PASSED [ 62%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[download_data.py] PASSED [ 62%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[download_images.py] PASSED [ 62%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[eda.py] PASSED [ 62%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[ensemble.py] PASSED [ 63%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[error_analysis.py] PASSED [ 63%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[extract_embeddings.py] PASSED [ 63%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[features.py] PASSED [ 64%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[gpu_train.py] PASSED [ 64%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[gpu_train_foundation.py] PASSED [ 64%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[kaggle_pipeline.py] PASSED [ 64%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[knn_features.py] PASSED [ 65%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[metrics.py] PASSED [ 65%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[objectives.py] PASSED [ 65%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[postprocess.py] PASSED [ 66%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[stacking.py] PASSED [ 66%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[test_baseline.py] PASSED [ 66%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[train.py] PASSED [ 66%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_network_calls_confined_to_allowlisted_modules[utils.py] PASSED [ 67%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_image_downloaders_only_fetch_image_link_urls PASSED [ 67%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_training_target_comes_only_from_train_csv PASSED [ 67%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestNoExternalPriceLookup::test_external_dataset_mirror_is_flagged PASSED [ 68%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_only_registered_permissive_models_are_referenced PASSED [ 68%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_registered_models_are_under_8b_and_permissive PASSED [ 68%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[configs/default.yaml] PASSED [ 68%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[notebooks/kaggle_amazon_ml_solution.ipynb] PASSED [ 69%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[run_gpu_foundation.sh] PASSED [ 69%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[run_gpu_milestone5.sh] PASSED [ 69%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[sample_code.py] PASSED [ 70%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/__init__.py] PASSED [ 70%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/adapter.py] PASSED [ 70%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/data.py] PASSED [ 70%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/download_data.py] PASSED [ 71%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/download_images.py] PASSED [ 71%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/eda.py] PASSED [ 71%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/ensemble.py] PASSED [ 72%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/error_analysis.py] PASSED [ 72%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/example.ipynb] PASSED [ 72%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/extract_embeddings.py] PASSED [ 72%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/features.py] PASSED [ 73%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/gpu_train.py] PASSED [ 73%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/gpu_train_foundation.py] PASSED [ 73%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/kaggle_pipeline.py] PASSED [ 74%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/knn_features.py] PASSED [ 74%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/metrics.py] PASSED [ 74%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/objectives.py] PASSED [ 74%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/postprocess.py] PASSED [ 75%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/stacking.py] PASSED [ 75%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/test_baseline.py] PASSED [ 75%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/train.py] PASSED [ 76%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[src/utils.py] PASSED [ 76%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/__init__.py] PASSED [ 76%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_adapter.py] PASSED [ 76%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_data.py] PASSED [ 77%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_ensemble.py] PASSED [ 77%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_features.py] PASSED [ 77%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_knn_features.py] PASSED [ 78%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_metrics.py] PASSED [ 78%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_objectives.py] PASSED [ 78%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_pipeline.py] PASSED [ 78%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_postprocess.py] PASSED [ 79%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_security_url.py] PASSED [ 79%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_stacking.py] PASSED [ 79%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_submission.py] PASSED [ 80%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_no_non_permissive_or_hosted_llm_references[tests/test_vision.py] PASSED [ 80%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_documentation_asserts_licence_and_parameter_bounds PASSED [ 80%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestModelLicenceAndSize::test_gbdt_and_sklearn_dependencies_are_permissive PASSED [ 80%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[configs/default.yaml] PASSED [ 81%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[notebooks/kaggle_amazon_ml_solution.ipynb] PASSED [ 81%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[run_gpu_foundation.sh] PASSED [ 81%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[run_gpu_milestone5.sh] PASSED [ 82%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[sample_code.py] PASSED [ 82%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/__init__.py] PASSED [ 82%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/adapter.py] PASSED [ 82%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/data.py] PASSED [ 83%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/download_data.py] PASSED [ 83%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/download_images.py] PASSED [ 83%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/eda.py] PASSED [ 84%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/ensemble.py] PASSED [ 84%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/error_analysis.py] PASSED [ 84%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/example.ipynb] PASSED [ 84%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/extract_embeddings.py] PASSED [ 85%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/features.py] PASSED [ 85%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/gpu_train.py] PASSED [ 85%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/gpu_train_foundation.py] PASSED [ 86%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/kaggle_pipeline.py] PASSED [ 86%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/knn_features.py] PASSED [ 86%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/metrics.py] PASSED [ 86%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/objectives.py] PASSED [ 87%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/postprocess.py] PASSED [ 87%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/stacking.py] PASSED [ 87%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/test_baseline.py] PASSED [ 88%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/train.py] PASSED [ 88%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[src/utils.py] PASSED [ 88%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/__init__.py] PASSED [ 88%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_adapter.py] PASSED [ 89%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_data.py] PASSED [ 89%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_ensemble.py] PASSED [ 89%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_features.py] PASSED [ 90%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_knn_features.py] PASSED [ 90%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_metrics.py] PASSED [ 90%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_objectives.py] PASSED [ 90%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_pipeline.py] PASSED [ 91%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_postprocess.py] PASSED [ 91%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_security_url.py] PASSED [ 91%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_stacking.py] PASSED [ 92%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_submission.py] PASSED [ 92%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_credentials[tests/test_vision.py] PASSED [ 92%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_private_hosts_or_usernames_in_scripts FAILED [ 92%]
+evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_gitignore_excludes_environments_and_weights PASSED [ 93%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_file_exists[src/utils.py] PASSED [ 93%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_file_exists[sample_code.py] PASSED [ 93%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_file_exists[dataset/sample_test.csv] PASSED [ 94%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_file_exists[dataset/sample_test_out.csv] PASSED [ 94%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_file_exists[Documentation_template.md] PASSED [ 94%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_file_exists[README.md] PASSED [ 94%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_notebook_src_test_ipynb_exists FAILED [ 95%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_dataset_files_present_in_checkout[dataset/train.csv] FAILED [ 95%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_dataset_files_present_in_checkout[dataset/test.csv] FAILED [ 95%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_utils_exposes_download_images_function PASSED [ 96%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_src_is_an_importable_package PASSED [ 96%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_parses_and_declares_predictor FAILED [ 96%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_predictor_outputs_positive_float SKIPPED [ 96%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_is_seeded_for_reproducibility FAILED [ 97%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_runs_end_to_end_on_sample_test FAILED [ 97%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMethodologyDocument::test_required_sections_present PASSED [ 97%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMethodologyDocument::test_no_unfilled_template_placeholders PASSED [ 98%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMethodologyDocument::test_document_is_roughly_one_page FAILED [ 98%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMethodologyDocument::test_readme_states_smape_and_output_format PASSED [ 98%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_dependency_manifest_exists FAILED [ 98%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_optional_heavy_dependencies_are_guarded_at_import FAILED [ 99%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_run_scripts_do_not_hardcode_a_foreign_repo_path FAILED [ 99%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_core_modules_import_without_optional_dependencies PASSED [ 99%]
+evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_default_config_output_path_is_inside_dataset_dir PASSED [100%]/home/ubuntu/venv-amzn/lib/python3.10/site-packages/coverage/inorout.py:558: CoverageWarning: Module sample_code was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.16.1/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+
+
+=================================== FAILURES ===================================
+______ TestValidateSubmissionRejectsInvalid.test_infinite_price_rejected _______
+evaluation_suite/test_req02_submission_validation.py:68: in test_infinite_price_rejected
+    with pytest.raises(ValueError):
+E   Failed: DID NOT RAISE ValueError
+___ TestValidateSubmissionRejectsInvalid.test_duplicate_sample_ids_rejected ____
+evaluation_suite/test_req02_submission_validation.py:73: in test_duplicate_sample_ids_rejected
+    with pytest.raises(ValueError):
+E   Failed: DID NOT RAISE ValueError
+_ TestValidateSubmissionRejectsInvalid.test_non_numeric_price_raises_value_error _
+evaluation_suite/test_req02_submission_validation.py:78: in test_non_numeric_price_raises_value_error
+    validate_submission(_sub(["abc", "1.0"]))
+src/data.py:93: in validate_submission
+    if (df["price"] <= 0).any():
+../venv-amzn/lib/python3.10/site-packages/pandas/core/ops/common.py:76: in new_method
+    return method(self, other)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/arraylike.py:52: in __le__
+    return self._cmp_method(other, operator.le)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/series.py:6138: in _cmp_method
+    res_values = ops.comparison_op(lvalues, rvalues, op)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/ops/array_ops.py:344: in comparison_op
+    res_values = comp_method_OBJECT_ARRAY(op, lvalues, rvalues)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/ops/array_ops.py:129: in comp_method_OBJECT_ARRAY
+    result = libops.scalar_compare(x.ravel(), y, op)
+pandas/_libs/ops.pyx:107: in pandas._libs.ops.scalar_compare
+    ???
+E   TypeError: '<=' not supported between instances of 'str' and 'int'
+_____ TestPromptBuilder.test_structured_features_on_all_nan_catalog_column _____
+evaluation_suite/test_req04_feature_engineering.py:189: in test_structured_features_on_all_nan_catalog_column
+    out = extract_structured_features(pd.DataFrame({"sample_id": [1, 2], "catalog_content": [np.nan, np.nan]}))
+src/features.py:366: in extract_structured_features
+    result["content_len"] = result["catalog_content"].str.len().fillna(0)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/generic.py:6321: in __getattr__
+    return object.__getattribute__(self, name)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/accessor.py:224: in __get__
+    accessor_obj = self._accessor(obj)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/strings/accessor.py:194: in __init__
+    self._inferred_dtype = self._validate(data)
+../venv-amzn/lib/python3.10/site-packages/pandas/core/strings/accessor.py:248: in _validate
+    raise AttributeError("Can only use .str accessor with string values!")
+E   AttributeError: Can only use .str accessor with string values!. Did you mean: 'std'?
+_____________ TestTextVectorisation.test_tfidf_tolerates_nan_text ______________
+evaluation_suite/test_req04_feature_engineering.py:203: in test_tfidf_tolerates_nan_text
+    X, _ = extract_text_features(pd.Series([np.nan, "hello world", ""]), min_df=1)
+src/features.py:414: in extract_text_features
+    X = vec.fit_transform(texts)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:2105: in fit_transform
+    X = super().fit_transform(raw_documents)
+../venv-amzn/lib/python3.10/site-packages/sklearn/base.py:1365: in wrapper
+    return fit_method(estimator, *args, **kwargs)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:1377: in fit_transform
+    vocabulary, X = self._count_vocab(raw_documents, self.fixed_vocabulary_)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:1264: in _count_vocab
+    for feature in analyze(doc):
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:99: in _analyze
+    doc = decoder(doc)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:232: in decode
+    raise ValueError(
+E   ValueError: np.nan is an invalid document, expected byte or unicode string.
+_ TestEndToEndSubmission.test_pipeline_survives_empty_and_nan_catalogs_in_test _
+evaluation_suite/test_req05_pipeline_end_to_end.py:128: in test_pipeline_survives_empty_and_nan_catalogs_in_test
+    X_tr, X_te, y, _, _ = prepare_features(train_df, te, SMALL_CONFIG)
+src/train.py:79: in prepare_features
+    X_text_test, _ = extract_text_features(
+src/features.py:404: in extract_text_features
+    X = vectorizer.transform(texts)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:2129: in transform
+    X = super().transform(raw_documents)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:1422: in transform
+    _, X = self._count_vocab(raw_documents, fixed_vocab=True)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:1264: in _count_vocab
+    for feature in analyze(doc):
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:99: in _analyze
+    doc = decoder(doc)
+../venv-amzn/lib/python3.10/site-packages/sklearn/feature_extraction/text.py:232: in decode
+    raise ValueError(
+E   ValueError: np.nan is an invalid document, expected byte or unicode string.
+----------------------------- Captured stdout call -----------------------------
+Extracting structured features...
+Vectorizing text with TF-IDF...
+__ TestSecretsHygiene.test_no_hardcoded_private_hosts_or_usernames_in_scripts __
+evaluation_suite/test_req08_fair_play_and_model_constraints.py:169: in test_no_hardcoded_private_hosts_or_usernames_in_scripts
+    assert not offenders, f"private host/user embedded in {offenders}"
+E   AssertionError: private host/user embedded in ['run_gpu_foundation.sh']
+E   assert not ['run_gpu_foundation.sh']
+_ TestMandatedFilesExist.test_statement_referenced_notebook_src_test_ipynb_exists _
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:44: in test_statement_referenced_notebook_src_test_ipynb_exists
+    assert os.path.exists(os.path.join(SRC_DIR, "test.ipynb"))
+E   AssertionError: assert False
+E    +  where False = <function exists at 0x71b46e715ea0>('/home/ubuntu/Amazon-ML-Challenge-2025/src/test.ipynb')
+E    +    where <function exists at 0x71b46e715ea0> = <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'>.exists
+E    +      where <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'> = os.path
+E    +    and   '/home/ubuntu/Amazon-ML-Challenge-2025/src/test.ipynb' = <function join at 0x71b46e716710>('/home/ubuntu/Amazon-ML-Challenge-2025/src', 'test.ipynb')
+E    +      where <function join at 0x71b46e716710> = <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'>.join
+E    +        where <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'> = os.path
+_ TestMandatedFilesExist.test_dataset_files_present_in_checkout[dataset/train.csv] _
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:49: in test_dataset_files_present_in_checkout
+    assert os.path.exists(os.path.join(REPO_ROOT, rel)), f"{rel} missing (git-ignored)"
+E   AssertionError: dataset/train.csv missing (git-ignored)
+E   assert False
+E    +  where False = <function exists at 0x71b46e715ea0>('/home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv')
+E    +    where <function exists at 0x71b46e715ea0> = <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'>.exists
+E    +      where <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'> = os.path
+E    +    and   '/home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv' = <function join at 0x71b46e716710>('/home/ubuntu/Amazon-ML-Challenge-2025', 'dataset/train.csv')
+E    +      where <function join at 0x71b46e716710> = <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'>.join
+E    +        where <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'> = os.path
+_ TestMandatedFilesExist.test_dataset_files_present_in_checkout[dataset/test.csv] _
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:49: in test_dataset_files_present_in_checkout
+    assert os.path.exists(os.path.join(REPO_ROOT, rel)), f"{rel} missing (git-ignored)"
+E   AssertionError: dataset/test.csv missing (git-ignored)
+E   assert False
+E    +  where False = <function exists at 0x71b46e715ea0>('/home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv')
+E    +    where <function exists at 0x71b46e715ea0> = <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'>.exists
+E    +      where <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'> = os.path
+E    +    and   '/home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv' = <function join at 0x71b46e716710>('/home/ubuntu/Amazon-ML-Challenge-2025', 'dataset/test.csv')
+E    +      where <function join at 0x71b46e716710> = <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'>.join
+E    +        where <module 'posixpath' from '/usr/lib/python3.10/posixpath.py'> = os.path
+________ TestSampleCode.test_sample_code_parses_and_declares_predictor _________
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:63: in test_sample_code_parses_and_declares_predictor
+    tree = ast.parse(_read(os.path.join(REPO_ROOT, "sample_code.py")))
+/usr/lib/python3.10/ast.py:50: in parse
+    return compile(source, filename, mode, flags,
+E     File "<unknown>", line 6
+E       '''
+E       ^
+E   SyntaxError: unterminated triple-quoted string literal (detected at line 42)
+________ TestSampleCode.test_sample_code_is_seeded_for_reproducibility _________
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:82: in test_sample_code_is_seeded_for_reproducibility
+    assert re.search(r"random\.seed\(|np\.random\.seed\(|default_rng\(", src), "predictor is unseeded/non-deterministic"
+E   AssertionError: predictor is unseeded/non-deterministic
+E   assert None
+E    +  where None = <function search at 0x71b46e640700>('random\\.seed\\(|np\\.random\\.seed\\(|default_rng\\(', 'import os\nimport random\nimport pandas as pd\n\ndef predictor(sample_id, catalog_content, image_link):\n    \'\'\'\n    Call your model/approach here\n    \n    Parameters:\n    - sample_id: Unique identifier for the sample\n    - catalog_content: Text containing product title and description\n    - image_link: URL to product image\n    \n    Returns:\n    - price: Predicted price as a float\n    """\n    # Core price prediction inference\n    # Note: For production batch inference, use src.train / src.gpu_train\n    return round(random.uniform(5.0, 500.0), 2)\n\nif __name__ == "__main__":\n    DATASET_FOLDER = \'dataset/\'\n    \n    # Read test data\n    test = pd.read_csv(os.path.join(DATASET_FOLDER, \'test.csv\'))\n    \n    # Apply predictor function to each row\n    test[\'price\'] = test.apply(\n        lambda row: predictor(row[\'sample_id\'], row[\'catalog_content\'], row[\'image_link\']), \n        axis=1\n    )\n    \n    # Select only required columns for output\n    output_df = test[[\'sample_id\', \'price\']]\n    \n    # Save predictions\n    output_filename = os.path.join(DATASET_FOLDER, \'test_out.csv\')\n    output_df.to_csv(output_filename, index=False)\n    \n    print(f"Predictions saved to {output_filename}")\n    print(f"Total predictions: {len(output_df)}")\n    print(f"Sample predictions:\\n{output_df.head()}")\n')
+E    +    where <function search at 0x71b46e640700> = re.search
+________ TestSampleCode.test_sample_code_runs_end_to_end_on_sample_test ________
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:91: in test_sample_code_runs_end_to_end_on_sample_test
+    assert res.returncode == 0, res.stderr
+E   AssertionError:   File "/tmp/pytest-of-ubuntu/pytest-5/test_sample_code_runs_end_to_e0/sample_code.py", line 6
+E         '''
+E         ^
+E     SyntaxError: unterminated triple-quoted string literal (detected at line 42)
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/home/ubuntu/venv-amzn/bin/python', 'sample_code.py'], returncode=1, stdout='', stderr='  File "/tmp/pytest-of-ubuntu/pytest-5/test_sample_code_runs_end_to_e0/sample_code.py", line 6\n    \'\'\'\n    ^\nSyntaxError: unterminated triple-quoted string literal (detected at line 42)\n').returncode
+__________ TestMethodologyDocument.test_document_is_roughly_one_page ___________
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:113: in test_document_is_roughly_one_page
+    assert words <= 650, f"{words} words exceeds a one-page document"
+E   AssertionError: 887 words exceeds a one-page document
+E   assert 887 <= 650
+___________ TestBuildReproducibility.test_dependency_manifest_exists ___________
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:123: in test_dependency_manifest_exists
+    assert any(os.path.exists(os.path.join(REPO_ROOT, c)) for c in candidates), (
+E   AssertionError: no dependency manifest; the repo cannot be installed reproducibly
+E   assert False
+E    +  where False = any(<generator object TestBuildReproducibility.test_dependency_manifest_exists.<locals>.<genexpr> at 0x71b42df5a810>)
+_ TestBuildReproducibility.test_optional_heavy_dependencies_are_guarded_at_import _
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:138: in test_optional_heavy_dependencies_are_guarded_at_import
+    assert not offenders, offenders
+E   AssertionError: ['gpu_train_foundation.py:lightgbm', 'gpu_train_foundation.py:catboost', 'gpu_train.py:lightgbm', 'gpu_train.py:catboost', 'kaggle_pipeline.py:lightgbm', 'kaggle_pipeline.py:catboost']
+E   assert not ['gpu_train_foundation.py:lightgbm', 'gpu_train_foundation.py:catboost', 'gpu_train.py:lightgbm', 'gpu_train.py:catboost', 'kaggle_pipeline.py:lightgbm', 'kaggle_pipeline.py:catboost']
+_ TestBuildReproducibility.test_run_scripts_do_not_hardcode_a_foreign_repo_path _
+evaluation_suite/test_req09_structure_docs_and_sample_code.py:146: in test_run_scripts_do_not_hardcode_a_foreign_repo_path
+    assert "Amazon-Ml-Prep" not in src, f"{f} assumes $HOME/Amazon-Ml-Prep, but the repo is Amazon-ML-Challenge-2025"
+E   AssertionError: run_gpu_foundation.sh assumes $HOME/Amazon-Ml-Prep, but the repo is Amazon-ML-Challenge-2025
+E   assert 'Amazon-Ml-Prep' not in '#!/bin/bash..._out.csv\n\n'
+E     
+E     'Amazon-Ml-Prep' is contained here:
+E       #!/bin/bash
+E       # ==============================================================================
+E       # Amazon ML Challenge 2025: Foundation Model + Neural Adapter GPU Pipeline
+E       # Target machine: NVIDIA GPU Server (24je093024je0930@172.16.203.23)
+E       # ==============================================================================...
+E     
+E     ...Full output truncated (75 lines hidden), use '-vv' to show
+=============================== warnings summary ===============================
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_empty_input_does_not_return_negative
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/numpy/_core/fromnumeric.py:3860: RuntimeWarning: Mean of empty slice.
+    return _methods._mean(a, axis=axis, dtype=dtype,
+
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_empty_input_does_not_return_negative
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/numpy/_core/_methods.py:145: RuntimeWarning: invalid value encountered in scalar divide
+    ret = ret.dtype.type(ret / rcount)
+
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/lightgbm/sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+    eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.10.12-final-0 _______________
+
+Name                          Stmts   Miss  Cover   Missing
+-----------------------------------------------------------
+src/__init__.py                   0      0   100%
+src/adapter.py                  165     20    88%   20-21, 205, 208-213, 236, 238, 276, 278, 309, 312, 317-318, 343-345, 351
+src/data.py                      37      0   100%
+src/download_data.py             36     36     0%   1-43
+src/download_images.py          136     47    65%   45-46, 88-90, 106-107, 112-117, 152, 198-252, 256
+src/eda.py                       17     17     0%   1-20
+src/ensemble.py                  45      3    93%   46, 68, 95
+src/error_analysis.py           103     83    19%   33-53, 62-98, 107-121, 126-128, 145-152, 156-239, 243
+src/extract_embeddings.py       155    155     0%   6-261
+src/features.py                 272     69    75%   146, 150-152, 466-511, 543-578, 669, 682
+src/gpu_train.py                123    123     0%   11-223
+src/gpu_train_foundation.py     322    322     0%   11-552
+src/kaggle_pipeline.py          123    123     0%   10-230
+src/knn_features.py              89     22    75%   4, 13-21, 137-150
+src/metrics.py                   15      0   100%
+src/objectives.py                79     36    54%   75-93, 99-100, 102-103, 112, 136-154, 165-166, 168-169, 178
+src/postprocess.py              141     62    56%   202-226, 257-285, 304-308, 373, 385-415, 419
+src/stacking.py                  86     19    78%   122-123, 142, 172-193
+src/test_baseline.py             97     97     0%   1-133
+src/train.py                    143     46    68%   248-307, 311-320
+src/utils.py                     46      6    87%   24-25, 50-53
+-----------------------------------------------------------
+TOTAL                          2230   1286    42%
+Coverage JSON written to file evaluation_suite/results/coverage_evaluation_suite.json
+=========================== short test summary info ============================
+FAILED evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_infinite_price_rejected
+FAILED evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_duplicate_sample_ids_rejected
+FAILED evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_non_numeric_price_raises_value_error
+FAILED evaluation_suite/test_req04_feature_engineering.py::TestPromptBuilder::test_structured_features_on_all_nan_catalog_column
+FAILED evaluation_suite/test_req04_feature_engineering.py::TestTextVectorisation::test_tfidf_tolerates_nan_text
+FAILED evaluation_suite/test_req05_pipeline_end_to_end.py::TestEndToEndSubmission::test_pipeline_survives_empty_and_nan_catalogs_in_test
+FAILED evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_private_hosts_or_usernames_in_scripts
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_notebook_src_test_ipynb_exists
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_dataset_files_present_in_checkout[dataset/train.csv]
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_dataset_files_present_in_checkout[dataset/test.csv]
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_parses_and_declares_predictor
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_is_seeded_for_reproducibility
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_runs_end_to_end_on_sample_test
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMethodologyDocument::test_document_is_roughly_one_page
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_dependency_manifest_exists
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_optional_heavy_dependencies_are_guarded_at_import
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_run_scripts_do_not_hardcode_a_foreign_repo_path
+============ 17 failed, 331 passed, 3 skipped, 5 warnings in 4.93s =============

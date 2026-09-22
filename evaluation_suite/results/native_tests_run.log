@@ -1,0 +1,286 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.1.1, pluggy-1.6.0 -- /home/ubuntu/venv-amzn/bin/python
+rootdir: /home/ubuntu/Amazon-ML-Challenge-2025
+plugins: cov-7.1.0
+collecting ... collected 142 items
+
+tests/test_adapter.py::TestPriceStratifiedFolds::test_stratified_folds_shape_and_splits PASSED [  0%]
+tests/test_adapter.py::TestPriceStratifiedFolds::test_stratified_folds_quantile_balance PASSED [  1%]
+tests/test_adapter.py::TestNeuralAdapterTorch::test_smape_loss_module PASSED [  2%]
+tests/test_adapter.py::TestNeuralAdapterTorch::test_multimodal_adapter_forward PASSED [  2%]
+tests/test_data.py::TestLoadTrain::test_train_loads_successfully FAILED  [  3%]
+tests/test_data.py::TestLoadTrain::test_train_has_correct_columns FAILED [  4%]
+tests/test_data.py::TestLoadTrain::test_train_has_expected_row_count FAILED [  4%]
+tests/test_data.py::TestLoadTrain::test_train_no_duplicate_sample_ids FAILED [  5%]
+tests/test_data.py::TestLoadTrain::test_train_prices_positive FAILED     [  6%]
+tests/test_data.py::TestLoadTrain::test_train_price_distribution_matches_known_stats FAILED [  7%]
+tests/test_data.py::TestLoadTrain::test_train_no_null_catalog_content FAILED [  7%]
+tests/test_data.py::TestLoadTest::test_test_loads_successfully FAILED    [  8%]
+tests/test_data.py::TestLoadTest::test_test_has_correct_columns FAILED   [  9%]
+tests/test_data.py::TestLoadTest::test_test_has_expected_row_count FAILED [  9%]
+tests/test_data.py::TestLoadTest::test_test_no_duplicate_sample_ids FAILED [ 10%]
+tests/test_data.py::TestLoadTest::test_test_has_no_price_column FAILED   [ 11%]
+tests/test_data.py::TestValidation::test_validate_submission_format PASSED [ 11%]
+tests/test_data.py::TestValidation::test_validate_submission_rejects_missing_columns PASSED [ 12%]
+tests/test_data.py::TestValidation::test_validate_submission_rejects_negative_prices PASSED [ 13%]
+tests/test_data.py::TestValidation::test_validate_submission_rejects_nan_prices PASSED [ 14%]
+tests/test_ensemble.py::test_find_optimal_blend_weights_single_model PASSED [ 14%]
+tests/test_ensemble.py::test_find_optimal_blend_weights_two_models PASSED [ 15%]
+tests/test_features.py::TestExtractField::test_extract_item_name PASSED  [ 16%]
+tests/test_features.py::TestExtractField::test_extract_value PASSED      [ 16%]
+tests/test_features.py::TestExtractField::test_extract_unit PASSED       [ 17%]
+tests/test_features.py::TestExtractField::test_extract_missing_field_returns_empty PASSED [ 18%]
+tests/test_features.py::TestExtractField::test_extract_handles_nan_input PASSED [ 19%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Fl Oz-fl_oz] PASSED [ 19%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[fluid ounce-fl_oz] PASSED [ 20%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[fl. oz-fl_oz] PASSED [ 21%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Ounce-oz] PASSED [ 21%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[oz-oz] PASSED [ 22%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Pound-lb] PASSED [ 23%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[lb-lb] PASSED [ 23%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Count-count] PASSED [ 24%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[count-count] PASSED [ 25%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Gram-g] PASSED [ 26%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[g-g] PASSED [ 26%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Kilogram-kg] PASSED [ 27%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[kg-kg] PASSED [ 28%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Milliliter-ml] PASSED [ 28%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[ml-ml] PASSED [ 29%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[Liter-l] PASSED [ 30%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_known_units[liter-l] PASSED [ 30%]
+tests/test_features.py::TestNormalizeUnit::test_normalize_unknown_unit_lowercases PASSED [ 31%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[Pack of 6-6.0] PASSED [ 32%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[pack of 12-12.0] PASSED [ 33%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[12 pack-12.0] PASSED [ 33%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[24 count-24.0] PASSED [ 34%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[case of 4-4.0] PASSED [ 35%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[box of 10-10.0] PASSED [ 35%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[set of 3-3.0] PASSED [ 36%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[6 pk-6.0] PASSED [ 37%]
+tests/test_features.py::TestExtractPackQuantity::test_pack_quantity_extraction[Just a regular item-1.0] PASSED [ 38%]
+tests/test_features.py::TestTextFeatures::test_tfidf_output_shape PASSED [ 38%]
+tests/test_features.py::TestTextFeatures::test_tfidf_no_nan PASSED       [ 39%]
+tests/test_features.py::TestTextFeatures::test_tfidf_reproducible PASSED [ 40%]
+tests/test_features.py::TestTextFeatures::test_tfidf_transform_mode PASSED [ 40%]
+tests/test_features.py::TestStructuredFeatures::test_extract_structured_fields PASSED [ 41%]
+tests/test_features.py::TestStructuredFeatures::test_structured_no_nan_in_numerics PASSED [ 42%]
+tests/test_features.py::TestStructuredFeatures::test_structured_value_num_positive PASSED [ 42%]
+tests/test_features.py::TestStructuredFeatures::test_structured_pack_qty_at_least_1 PASSED [ 43%]
+tests/test_features.py::TestAdvancedFeatures::test_extract_brand[La Victoria Green Taco Sauce Mild, 12 Ounce-La Victoria] PASSED [ 44%]
+tests/test_features.py::TestAdvancedFeatures::test_extract_brand[Apple AirPods Pro (2nd Generation)-Apple] PASSED [ 45%]
+tests/test_features.py::TestAdvancedFeatures::test_extract_brand[Dove Men+Care Body Wash Clean Comfort 18 oz-Dove Men+Care] PASSED [ 45%]
+tests/test_features.py::TestAdvancedFeatures::test_extract_brand[Bounty Quick-Size Paper Towels-Bounty] PASSED [ 46%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[fl_oz-volume] PASSED [ 47%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[ml-volume] PASSED [ 47%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[l-volume] PASSED [ 48%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[oz-weight] PASSED [ 49%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[lb-weight] PASSED [ 50%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[g-weight] PASSED [ 50%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[kg-weight] PASSED [ 51%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[count-count] PASSED [ 52%]
+tests/test_features.py::TestAdvancedFeatures::test_get_unit_category[unknown_unit-other] PASSED [ 52%]
+tests/test_features.py::TestAdvancedFeatures::test_count_bullet_points PASSED [ 53%]
+tests/test_features.py::TestAdvancedFeatures::test_physical_conversions PASSED [ 54%]
+tests/test_features.py::TestAdvancedFeatures::test_number_to_words PASSED [ 54%]
+tests/test_features.py::TestAdvancedFeatures::test_build_llm_prompt PASSED [ 55%]
+tests/test_features.py::TestAdvancedFeatures::test_extract_advanced_catalog_features PASSED [ 56%]
+tests/test_features.py::TestAdvancedFeatures::test_compute_iqr_training_mask PASSED [ 57%]
+tests/test_knn_features.py::test_knn_features_shapes PASSED              [ 57%]
+tests/test_knn_features.py::test_knn_oof_leakage PASSED                  [ 58%]
+tests/test_knn_features.py::test_knn_k_greater_than_fold_size PASSED     [ 59%]
+tests/test_knn_features.py::test_knn_weighted_mean_and_spread_properties PASSED [ 59%]
+tests/test_metrics.py::test_smape_perfect_prediction PASSED              [ 60%]
+tests/test_metrics.py::test_smape_competition_example PASSED             [ 61%]
+tests/test_metrics.py::test_smape_symmetric PASSED                       [ 61%]
+tests/test_metrics.py::test_smape_bounded PASSED                         [ 62%]
+tests/test_metrics.py::test_smape_multiple_samples PASSED                [ 63%]
+tests/test_metrics.py::test_smape_handles_small_values PASSED            [ 64%]
+tests/test_metrics.py::test_smape_clips_negative_predictions PASSED      [ 64%]
+tests/test_metrics.py::test_smape_input_types PASSED                     [ 65%]
+tests/test_metrics.py::test_smape_large_dataset_performance PASSED       [ 66%]
+tests/test_objectives.py::test_smape_gradient_sign PASSED                [ 66%]
+tests/test_objectives.py::test_smape_gradient_numerical_finite_difference PASSED [ 67%]
+tests/test_objectives.py::test_lgb_custom_objective_training PASSED      [ 68%]
+tests/test_objectives.py::test_hessian_strictly_positive_and_floored PASSED [ 69%]
+tests/test_objectives.py::test_charbonnier_smoothing_continuity PASSED   [ 69%]
+tests/test_objectives.py::test_dual_signature_lgb_and_xgb PASSED         [ 70%]
+tests/test_objectives.py::test_extreme_clamping_prevents_overflow PASSED [ 71%]
+tests/test_pipeline.py::test_load_config PASSED                          [ 71%]
+tests/test_pipeline.py::test_prepare_features PASSED                     [ 72%]
+tests/test_pipeline.py::test_train_ridge_cv PASSED                       [ 73%]
+tests/test_pipeline.py::test_train_lgbm_cv PASSED                        [ 73%]
+tests/test_pipeline.py::test_save_submission PASSED                      [ 74%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_optimize_global_multiplier_improves_biased_predictions PASSED [ 75%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_optimize_clip_floor_prevents_low_end_blowups PASSED [ 76%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_calibrate_predictions_nested_cv_no_leakage PASSED [ 76%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_apply_postprocessing_constraints PASSED [ 77%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_distribution_gap_and_alignment PASSED [ 78%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_power_law_monotonicity PASSED [ 78%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_power_law_numerical_stability PASSED [ 79%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_power_law_convergence PASSED [ 80%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_evaluate_power_law_nested_cv PASSED [ 80%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_power_law_rank_safety_negative_exponent PASSED [ 81%]
+tests/test_postprocess.py::TestPostprocessingCalibration::test_apply_postprocessing_with_power_law PASSED [ 82%]
+tests/test_security_url.py::test_is_permitted_url_schemes[https://m.media-amazon.com/images/I/71XfHPR36-L.jpg-True] PASSED [ 83%]
+tests/test_security_url.py::test_is_permitted_url_schemes[http://images.amazon.com/product123.jpg-True] PASSED [ 83%]
+tests/test_security_url.py::test_is_permitted_url_schemes[file:///etc/passwd-False] PASSED [ 84%]
+tests/test_security_url.py::test_is_permitted_url_schemes[file:///C:/Windows/system.ini-False] PASSED [ 85%]
+tests/test_security_url.py::test_is_permitted_url_schemes[ftp://anonymous@ftp.example.com/pub/file.txt-False] PASSED [ 85%]
+tests/test_security_url.py::test_is_permitted_url_schemes[javascript:alert(1)-False] PASSED [ 86%]
+tests/test_security_url.py::test_is_permitted_url_schemes[data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA-False] PASSED [ 87%]
+tests/test_security_url.py::test_is_permitted_url_schemes[gopher://evil.com-False] PASSED [ 88%]
+tests/test_security_url.py::test_is_permitted_url_schemes[-False] PASSED [ 88%]
+tests/test_security_url.py::test_is_permitted_url_schemes[None-False] PASSED [ 89%]
+tests/test_security_url.py::test_is_permitted_url_schemes[12345-False] PASSED [ 90%]
+tests/test_security_url.py::test_no_legacy_urllib_open_calls PASSED      [ 90%]
+tests/test_stacking.py::TestFeatureConditionedStacking::test_build_meta_features_shape_and_values PASSED [ 91%]
+tests/test_stacking.py::TestFeatureConditionedStacking::test_build_meta_features_without_conditioning PASSED [ 92%]
+tests/test_stacking.py::TestFeatureConditionedStacking::test_stacker_fit_and_predict_constraints PASSED [ 92%]
+tests/test_stacking.py::TestFeatureConditionedStacking::test_evaluate_stacking_cv_reduces_smape PASSED [ 93%]
+tests/test_submission.py::test_submission_file_exists PASSED             [ 94%]
+tests/test_submission.py::test_submission_structure_and_ids FAILED       [ 95%]
+tests/test_vision.py::TestImageIntegrityAndAuditing::test_is_image_valid_cases PASSED [ 95%]
+tests/test_vision.py::TestImageIntegrityAndAuditing::test_audit_downloaded_images PASSED [ 96%]
+tests/test_vision.py::TestImageIntegrityAndAuditing::test_permitted_url_whitelist PASSED [ 97%]
+tests/test_vision.py::TestVisualMetadataExtraction::test_extract_visual_metadata_features PASSED [ 97%]
+tests/test_vision.py::TestVisionSVDReduction::test_build_vision_svd_features PASSED [ 98%]
+tests/test_vision.py::TestVisionSVDReduction::test_build_feature_matrix_with_vision_svd PASSED [ 99%]
+tests/test_vision.py::TestMultimodalAdapterVisionGating::test_cross_modal_gated_forward PASSED [100%]
+
+=================================== FAILURES ===================================
+_________________ TestLoadTrain.test_train_loads_successfully __________________
+tests/test_data.py:22: in test_train_loads_successfully
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+_________________ TestLoadTrain.test_train_has_correct_columns _________________
+tests/test_data.py:27: in test_train_has_correct_columns
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+_______________ TestLoadTrain.test_train_has_expected_row_count ________________
+tests/test_data.py:33: in test_train_has_expected_row_count
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+_______________ TestLoadTrain.test_train_no_duplicate_sample_ids _______________
+tests/test_data.py:40: in test_train_no_duplicate_sample_ids
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+___________________ TestLoadTrain.test_train_prices_positive ___________________
+tests/test_data.py:45: in test_train_prices_positive
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+_______ TestLoadTrain.test_train_price_distribution_matches_known_stats ________
+tests/test_data.py:51: in test_train_price_distribution_matches_known_stats
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+_______________ TestLoadTrain.test_train_no_null_catalog_content _______________
+tests/test_data.py:57: in test_train_no_null_catalog_content
+    df = load_train(DATASET_DIR)
+src/data.py:28: in load_train
+    raise FileNotFoundError(f"Training file not found: {path}")
+E   FileNotFoundError: Training file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/train.csv
+__________________ TestLoadTest.test_test_loads_successfully ___________________
+tests/test_data.py:66: in test_test_loads_successfully
+    df = load_test(DATASET_DIR)
+src/data.py:55: in load_test
+    raise FileNotFoundError(f"Test file not found: {path}")
+E   FileNotFoundError: Test file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv
+__________________ TestLoadTest.test_test_has_correct_columns __________________
+tests/test_data.py:71: in test_test_has_correct_columns
+    df = load_test(DATASET_DIR)
+src/data.py:55: in load_test
+    raise FileNotFoundError(f"Test file not found: {path}")
+E   FileNotFoundError: Test file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv
+________________ TestLoadTest.test_test_has_expected_row_count _________________
+tests/test_data.py:77: in test_test_has_expected_row_count
+    df = load_test(DATASET_DIR)
+src/data.py:55: in load_test
+    raise FileNotFoundError(f"Test file not found: {path}")
+E   FileNotFoundError: Test file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv
+________________ TestLoadTest.test_test_no_duplicate_sample_ids ________________
+tests/test_data.py:83: in test_test_no_duplicate_sample_ids
+    df = load_test(DATASET_DIR)
+src/data.py:55: in load_test
+    raise FileNotFoundError(f"Test file not found: {path}")
+E   FileNotFoundError: Test file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv
+__________________ TestLoadTest.test_test_has_no_price_column __________________
+tests/test_data.py:88: in test_test_has_no_price_column
+    df = load_test(DATASET_DIR)
+src/data.py:55: in load_test
+    raise FileNotFoundError(f"Test file not found: {path}")
+E   FileNotFoundError: Test file not found: /home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv
+______________________ test_submission_structure_and_ids _______________________
+tests/test_submission.py:32: in test_submission_structure_and_ids
+    test_df = pd.read_csv(TEST_CSV_PATH)
+../venv-amzn/lib/python3.10/site-packages/pandas/io/parsers/readers.py:1026: in read_csv
+    return _read(filepath_or_buffer, kwds)
+../venv-amzn/lib/python3.10/site-packages/pandas/io/parsers/readers.py:620: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+../venv-amzn/lib/python3.10/site-packages/pandas/io/parsers/readers.py:1620: in __init__
+    self._engine = self._make_engine(f, self.engine)
+../venv-amzn/lib/python3.10/site-packages/pandas/io/parsers/readers.py:1880: in _make_engine
+    self.handles = get_handle(
+../venv-amzn/lib/python3.10/site-packages/pandas/io/common.py:873: in get_handle
+    handle = open(
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ubuntu/Amazon-ML-Challenge-2025/dataset/test.csv'
+=============================== warnings summary ===============================
+tests/test_pipeline.py::test_train_lgbm_cv
+tests/test_pipeline.py::test_train_lgbm_cv
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/lightgbm/sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+    eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.10.12-final-0 _______________
+
+Name                          Stmts   Miss  Cover
+-------------------------------------------------
+src/__init__.py                   0      0   100%
+src/adapter.py                  165    107    35%
+src/data.py                      37     13    65%
+src/download_data.py             36     36     0%
+src/download_images.py          136     89    35%
+src/eda.py                       17     17     0%
+src/ensemble.py                  45      3    93%
+src/error_analysis.py           103    103     0%
+src/extract_embeddings.py       155    155     0%
+src/features.py                 272     48    82%
+src/gpu_train.py                123    123     0%
+src/gpu_train_foundation.py     322    322     0%
+src/kaggle_pipeline.py          123    123     0%
+src/knn_features.py              89     22    75%
+src/metrics.py                   15      1    93%
+src/objectives.py                79     12    85%
+src/postprocess.py              141     23    84%
+src/stacking.py                  86      3    97%
+src/test_baseline.py             97     97     0%
+src/train.py                    143     46    68%
+src/utils.py                     46     29    37%
+-------------------------------------------------
+TOTAL                          2230   1372    38%
+=========================== short test summary info ============================
+FAILED tests/test_data.py::TestLoadTrain::test_train_loads_successfully - Fil...
+FAILED tests/test_data.py::TestLoadTrain::test_train_has_correct_columns - Fi...
+FAILED tests/test_data.py::TestLoadTrain::test_train_has_expected_row_count
+FAILED tests/test_data.py::TestLoadTrain::test_train_no_duplicate_sample_ids
+FAILED tests/test_data.py::TestLoadTrain::test_train_prices_positive - FileNo...
+FAILED tests/test_data.py::TestLoadTrain::test_train_price_distribution_matches_known_stats
+FAILED tests/test_data.py::TestLoadTrain::test_train_no_null_catalog_content
+FAILED tests/test_data.py::TestLoadTest::test_test_loads_successfully - FileN...
+FAILED tests/test_data.py::TestLoadTest::test_test_has_correct_columns - File...
+FAILED tests/test_data.py::TestLoadTest::test_test_has_expected_row_count - F...
+FAILED tests/test_data.py::TestLoadTest::test_test_no_duplicate_sample_ids - ...
+FAILED tests/test_data.py::TestLoadTest::test_test_has_no_price_column - File...
+FAILED tests/test_submission.py::test_submission_structure_and_ids - FileNotF...
+================== 13 failed, 129 passed, 2 warnings in 2.81s ==================

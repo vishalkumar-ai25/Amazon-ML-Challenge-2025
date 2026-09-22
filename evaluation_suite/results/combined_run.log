@@ -1,0 +1,87 @@
+....FFFFFFFFFFFF........................................................ [ 14%]
+..............................................................F......... [ 29%]
+.........ss...........FFF............................................... [ 43%]
+........................F.F...............F............................. [ 58%]
+........................................................................ [ 73%]
+........................................................................ [ 87%]
+...................................F.......FFF..FsFF..F.FFF../home/ubuntu/venv-amzn/lib/python3.10/site-packages/coverage/inorout.py:558: CoverageWarning: Module sample_code was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.16.1/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+            [100%]
+=============================== warnings summary ===============================
+tests/test_pipeline.py::test_train_lgbm_cv
+tests/test_pipeline.py::test_train_lgbm_cv
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs
+evaluation_suite/test_req05_pipeline_end_to_end.py::TestCrossValidatedModels::test_lgbm_cv_outputs
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/lightgbm/sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+    eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_empty_input_does_not_return_negative
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/numpy/_core/fromnumeric.py:3860: RuntimeWarning: Mean of empty slice.
+    return _methods._mean(a, axis=axis, dtype=dtype,
+
+evaluation_suite/test_req03_smape_metric.py::TestInputValidation::test_empty_input_does_not_return_negative
+  /home/ubuntu/venv-amzn/lib/python3.10/site-packages/numpy/_core/_methods.py:145: RuntimeWarning: invalid value encountered in scalar divide
+    ret = ret.dtype.type(ret / rcount)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.10.12-final-0 _______________
+
+Name                          Stmts   Miss  Cover
+-------------------------------------------------
+src/__init__.py                   0      0   100%
+src/adapter.py                  165     20    88%
+src/data.py                      37      0   100%
+src/download_data.py             36     36     0%
+src/download_images.py          136     47    65%
+src/eda.py                       17     17     0%
+src/ensemble.py                  45      3    93%
+src/error_analysis.py           103     83    19%
+src/extract_embeddings.py       155    155     0%
+src/features.py                 272     41    85%
+src/gpu_train.py                123    123     0%
+src/gpu_train_foundation.py     322    322     0%
+src/kaggle_pipeline.py          123    123     0%
+src/knn_features.py              89     22    75%
+src/metrics.py                   15      0   100%
+src/objectives.py                79     12    85%
+src/postprocess.py              141     23    84%
+src/stacking.py                  86      3    97%
+src/test_baseline.py             97     97     0%
+src/train.py                    143     46    68%
+src/utils.py                     46      6    87%
+-------------------------------------------------
+TOTAL                          2230   1179    47%
+=========================== short test summary info ============================
+FAILED tests/test_data.py::TestLoadTrain::test_train_loads_successfully - Fil...
+FAILED tests/test_data.py::TestLoadTrain::test_train_has_correct_columns - Fi...
+FAILED tests/test_data.py::TestLoadTrain::test_train_has_expected_row_count
+FAILED tests/test_data.py::TestLoadTrain::test_train_no_duplicate_sample_ids
+FAILED tests/test_data.py::TestLoadTrain::test_train_prices_positive - FileNo...
+FAILED tests/test_data.py::TestLoadTrain::test_train_price_distribution_matches_known_stats
+FAILED tests/test_data.py::TestLoadTrain::test_train_no_null_catalog_content
+FAILED tests/test_data.py::TestLoadTest::test_test_loads_successfully - FileN...
+FAILED tests/test_data.py::TestLoadTest::test_test_has_correct_columns - File...
+FAILED tests/test_data.py::TestLoadTest::test_test_has_expected_row_count - F...
+FAILED tests/test_data.py::TestLoadTest::test_test_no_duplicate_sample_ids - ...
+FAILED tests/test_data.py::TestLoadTest::test_test_has_no_price_column - File...
+FAILED tests/test_submission.py::test_submission_structure_and_ids - FileNotF...
+FAILED evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_infinite_price_rejected
+FAILED evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_duplicate_sample_ids_rejected
+FAILED evaluation_suite/test_req02_submission_validation.py::TestValidateSubmissionRejectsInvalid::test_non_numeric_price_raises_value_error
+FAILED evaluation_suite/test_req04_feature_engineering.py::TestPromptBuilder::test_structured_features_on_all_nan_catalog_column
+FAILED evaluation_suite/test_req04_feature_engineering.py::TestTextVectorisation::test_tfidf_tolerates_nan_text
+FAILED evaluation_suite/test_req05_pipeline_end_to_end.py::TestEndToEndSubmission::test_pipeline_survives_empty_and_nan_catalogs_in_test
+FAILED evaluation_suite/test_req08_fair_play_and_model_constraints.py::TestSecretsHygiene::test_no_hardcoded_private_hosts_or_usernames_in_scripts
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_statement_referenced_notebook_src_test_ipynb_exists
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_dataset_files_present_in_checkout[dataset/train.csv]
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMandatedFilesExist::test_dataset_files_present_in_checkout[dataset/test.csv]
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_parses_and_declares_predictor
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_is_seeded_for_reproducibility
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestSampleCode::test_sample_code_runs_end_to_end_on_sample_test
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestMethodologyDocument::test_document_is_roughly_one_page
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_dependency_manifest_exists
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_optional_heavy_dependencies_are_guarded_at_import
+FAILED evaluation_suite/test_req09_structure_docs_and_sample_code.py::TestBuildReproducibility::test_run_scripts_do_not_hardcode_a_foreign_repo_path
+30 failed, 460 passed, 3 skipped, 7 warnings in 4.80s
