@@ -17,8 +17,8 @@
 # ==============================================================================
 set -e
 
-REPO_DIR="$HOME/Amazon-Ml-Prep"
-cd "$REPO_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # 1. Activate Python Environment
 if [ -d "venv" ]; then

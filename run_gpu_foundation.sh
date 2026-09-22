@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # Amazon ML Challenge 2025: Foundation Model + Neural Adapter GPU Pipeline
-# Target machine: NVIDIA GPU Server (24je093024je0930@172.16.203.23)
+# Target machine: NVIDIA GPU Server (CUDA enabled)
 # ==============================================================================
 set -e
 
@@ -19,9 +19,9 @@ else
     echo "⚠️  WARNING: 'nvidia-smi' not found on this machine!"
     if [ "$OS" = "Darwin" ]; then
         echo "You are currently running on your local MacBook Air (macOS)."
-        echo "To use your NVIDIA RTX A4000 GPU, please connect to your remote server:"
-        echo "    ssh -L 11434:localhost:11434 24je093024je0930@172.16.203.23"
-        echo "    cd Amazon-Ml-Prep"
+        echo "To use your remote NVIDIA GPU, please connect to your remote GPU server:"
+        echo "    ssh \${GPU_USER:-\$USER}@\${GPU_HOST:-gpu-server}"
+        echo "    cd \$(basename \"\$PWD\")"
         echo "    ./run_gpu_foundation.sh"
         echo "========================================================================"
         echo "Falling back to local CPU/MPS mode with batch size 32..."
