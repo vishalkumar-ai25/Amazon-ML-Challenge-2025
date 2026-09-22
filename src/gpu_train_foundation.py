@@ -73,6 +73,7 @@ def main():
     parser.add_argument("--iqr_trim_multiplier", type=float, default=3.5, help="IQR multiplier for outlier trimming on training folds (0 to disable)")
     parser.add_argument("--use_cached_adapters", action="store_true", default=False, help="Load cached neural adapter predictions if available")
     parser.add_argument("--subset", type=int, default=None, help="Train and evaluate on a subset of N samples for fast benchmarking (e.g. 10000)")
+    parser.add_argument("--skip_visual_metadata", action="store_true", default=False, help="Skip extracting 8 PIL image metadata properties from disk")
     args = parser.parse_args()
 
     print("=" * 75)
@@ -117,19 +118,46 @@ def main():
     # Check for visual metadata features
     train_img_dir = os.path.join(base_dir, args.image_dir, "train")
     test_img_dir = os.path.join(base_dir, args.image_dir, "test")
-    has_images = os.path.exists(train_img_dir) and os.path.exists(test_img_dir)
+    has_images = (not args.skip_visual_metadata) and os.path.exists(train_img_dir) and os.path.exists(test_img_dir)
 
-    if has_images:
-        print("Extracting visual metadata properties from downloaded images...")
+    vmeta_cache_dir = os.path.join(base_dir, "data", "features")
+    os.makedirs(vmeta_cache_dir, exist_ok=True)
+    train_vmeta_file = os.path.join(vmeta_cache_dir, "train_visual_meta.npz")
+    test_vmeta_file = os.path.join(vmeta_cache_dir, "test_visual_meta.npz")
+
+    if (not args.skip_visual_metadata) and os.path.exists(train_vmeta_file) and os.path.exists(test_vmeta_file):
+        print(f"Loading cached visual metadata from {vmeta_cache_dir}...", flush=True)
+        tr_vm = np.load(train_vmeta_file)
+        te_vm = np.load(test_vmeta_file)
+        n_tr = len(train_df)
+        n_te = len(test_df)
+        for col in VISUAL_METADATA_COLS:
+            train_struct[col] = tr_vm[col][:n_tr]
+            test_struct[col] = te_vm[col][:n_te]
+        num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"] + VISUAL_METADATA_COLS
+        print(f"Loaded {len(VISUAL_METADATA_COLS)} visual metadata features from cache in <0.1s", flush=True)
+    elif has_images:
+        print("Extracting visual metadata properties from downloaded images...", flush=True)
         t_v0 = time.time()
         train_vmeta = extract_visual_metadata_features(train_df, train_img_dir)
+        print(f"  Train visual metadata completed in {time.time() - t_v0:.1f}s", flush=True)
+        t_v1 = time.time()
         test_vmeta = extract_visual_metadata_features(test_df, test_img_dir)
+        print(f"  Test visual metadata completed in {time.time() - t_v1:.1f}s", flush=True)
+        if args.subset is None:
+            try:
+                np.savez_compressed(train_vmeta_file, **{c: train_vmeta[c].values for c in VISUAL_METADATA_COLS})
+                np.savez_compressed(test_vmeta_file, **{c: test_vmeta[c].values for c in VISUAL_METADATA_COLS})
+                print(f"  Saved visual metadata cache to {vmeta_cache_dir}", flush=True)
+            except Exception as e:
+                print(f"  Warning: could not cache visual metadata ({e})", flush=True)
         for col in VISUAL_METADATA_COLS:
             train_struct[col] = train_vmeta[col]
             test_struct[col] = test_vmeta[col]
         num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"] + VISUAL_METADATA_COLS
-        print(f"Visual metadata extraction completed in {time.time() - t_v0:.1f}s")
     else:
+        if args.skip_visual_metadata:
+            print("Skipping visual metadata extraction (--skip_visual_metadata flag active)", flush=True)
         num_cols = NUMERIC_COLS + ["unit_freq", "brand_freq"]
 
     # Advanced Catalog Features (Category, Brand Tier, Material Quality, Price Flags)

@@ -52,8 +52,8 @@ echo "=== Launching Milestone 5 Training Pipeline ==="
 LOG_FILE="run_milestone5_$(date +%Y%m%d_%H%M%S).log"
 SUBSET_ARG=""
 if [ -n "$1" ]; then
-    SUBSET_ARG="--subset $1"
-    echo "=== Running in Fast Benchmark Mode: $1 Samples ==="
+    SUBSET_ARG="--subset $1 --skip_visual_metadata"
+    echo "=== Running in Fast Benchmark Mode: $1 Samples (Skipping Disk Image Scan) ==="
 fi
 
 python -u -m src.gpu_train_foundation \
