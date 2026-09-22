@@ -178,6 +178,8 @@ def main():
     # Use the best individual model and blended predictions
     models_to_analyze = {}
     for key in available_keys:
+        if key == "y_true":
+            continue
         models_to_analyze[key] = data[key]
     
     # If we have individual model OOFs, also create a simple blend
