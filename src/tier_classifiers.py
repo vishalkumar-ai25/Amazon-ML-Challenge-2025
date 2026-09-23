@@ -10,6 +10,7 @@ from suffering from median shrinkage on Deciles 0 and 9.
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -94,6 +95,8 @@ def train_extreme_tier_classifiers_cv(
     test_p_luxury = np.zeros(n_test, dtype=np.float32)
 
     n_folds = len(cv_splits)
+
+    warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
     for fold, (tr_idx, va_idx) in enumerate(cv_splits):
         X_tr, X_va = X_train[tr_idx], X_train[va_idx]
