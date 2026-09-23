@@ -63,19 +63,38 @@ for import_name, pip_name in deps:
 # 3. Check / Extract Foundation Embeddings
 SUBSET_ARG=""
 SUBSET_EXTRACT_ARG=""
-if [ -n "$1" ]; then
+FORCE_FLAG=""
+
+for arg in "$@"; do
+    if [ "$arg" == "--force" ] || [ "$arg" == "force" ]; then
+        FORCE_FLAG="--force"
+    fi
+done
+
+if [ -n "$1" ] && [ "$1" != "--force" ] && [ "$1" != "force" ]; then
     SUBSET_ARG="--subset $1 --skip_visual_metadata"
     SUBSET_EXTRACT_ARG="--subset $1"
     echo ""
     echo ">>> Fast Benchmark Mode Active: Slicing to $1 samples <<<"
 fi
 
+if [ -n "$FORCE_FLAG" ]; then
+    SUBSET_EXTRACT_ARG="$SUBSET_EXTRACT_ARG --force"
+    echo ">>> Force Re-Extraction Active: Enriched prompts will be freshly extracted <<<"
+fi
+
 TEXT_MODEL="Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 TEXT_TAG="gte_qwen2_1_5b_instruct"
 
 EXPECTED_ROWS=${1:-75000}
+if [ "$EXPECTED_ROWS" == "--force" ] || [ "$EXPECTED_ROWS" == "force" ]; then
+    EXPECTED_ROWS=75000
+fi
 
 check_cache_rows() {
+    if [ -n "$FORCE_FLAG" ]; then
+        return 1
+    fi
     local file="$1"
     local min_rows="$2"
     python -c "
