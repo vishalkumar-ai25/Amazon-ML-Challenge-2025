@@ -115,8 +115,8 @@ python -u -m src.gpu_train_foundation \
     --use_modal_tower \
     --modal_tower_epochs 30 \
     --modal_tower_lr 3e-4 \
-    --modal_tower_loss mse \
-    --modal_tower_target log1p \
+    --modal_tower_loss huber \
+    --modal_tower_target log \
     --train_mae_adapter \
     --iqr_trim_multiplier 3.5 \
     $SUBSET_ARG \
