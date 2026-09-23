@@ -661,8 +661,38 @@ def main():
     blended_oof_calibrated = apply_power_law_calibration(blended_oof, a=opt_a, b=opt_b, clip_min=opt_floor)
     calibrated_test = apply_power_law_calibration(blended_test, a=opt_a, b=opt_b, clip_min=opt_floor)
 
+    # 7b. Asymmetric Piecewise Decile Calibration (C1-Continuous Tail Correction)
+    print("\n[6b/6] Evaluating Asymmetric Piecewise Decile Calibration (C1-Continuous Tail Correction)...", flush=True)
+    from src.postprocess import (
+        apply_asymmetric_piecewise_calibration,
+        optimize_asymmetric_piecewise_calibration,
+        evaluate_asymmetric_piecewise_nested_cv,
+    )
+    b_low_opt, b_high_opt, t_low, t_high, asym_base_sm, asym_cal_sm = optimize_asymmetric_piecewise_calibration(
+        y_train, blended_oof_calibrated, t_low=5.0, t_high=40.0, clip_min=opt_floor
+    )
+    print(f"Asymmetric Calibration: beta_low={b_low_opt:.4f}, beta_high={b_high_opt:.4f} (T_low=${t_low:.1f}, T_high=${t_high:.1f}) (SMAPE: {asym_base_sm:.2f}% -> {asym_cal_sm:.2f}%)", flush=True)
+
+    asym_cv_res = evaluate_asymmetric_piecewise_nested_cv(
+        y_train, blended_oof_calibrated, n_splits=5, t_low=t_low, t_high=t_high, clip_min=opt_floor
+    )
+    asym_cv_smape = asym_cv_res["calibrated_cv_smape"]
+    print(f"Asymmetric Nested 5-Fold CV SMAPE: {asym_cv_smape:.2f}% (std_b_low={asym_cv_res['std_beta_low']:.4f}, std_b_high={asym_cv_res['std_beta_high']:.4f})", flush=True)
+
+    if asym_cv_smape < best_cal_smape:
+        print(f">>> Asymmetric Decile Calibration improves nested CV SMAPE by {best_cal_smape - asym_cv_smape:.2f}%! Locking in.", flush=True)
+        best_cal_smape = asym_cal_sm
+        blended_oof_calibrated = apply_asymmetric_piecewise_calibration(
+            blended_oof_calibrated, beta_low=b_low_opt, beta_high=b_high_opt, t_low=t_low, t_high=t_high, clip_min=opt_floor
+        )
+        calibrated_test = apply_asymmetric_piecewise_calibration(
+            calibrated_test, beta_low=b_low_opt, beta_high=b_high_opt, t_low=t_low, t_high=t_high, clip_min=opt_floor
+        )
+    else:
+        print(f">>> Asymmetric Decile Calibration did not beat global power-law in nested CV ({asym_cv_smape:.2f}% vs {best_cal_smape:.2f}%). Keeping global power-law.", flush=True)
+
     print(f"\n=======================================================", flush=True)
-    print(f"  >>> FINAL POWER-LAW CALIBRATED ENSEMBLE OOF SMAPE: {best_cal_smape:.2f}% <<<", flush=True)
+    print(f"  >>> FINAL CALIBRATED ENSEMBLE OOF SMAPE: {best_cal_smape:.2f}% <<<", flush=True)
     print(f"=======================================================", flush=True)
 
 

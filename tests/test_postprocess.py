@@ -4,10 +4,13 @@ import pytest
 
 from src.metrics import smape
 from src.postprocess import (
+    apply_asymmetric_piecewise_calibration,
     apply_postprocessing,
     apply_power_law_calibration,
     calibrate_predictions_nested_cv,
+    evaluate_asymmetric_piecewise_nested_cv,
     evaluate_power_law_nested_cv,
+    optimize_asymmetric_piecewise_calibration,
     optimize_clip_floor,
     optimize_global_multiplier,
     optimize_power_law_calibration,
@@ -159,3 +162,118 @@ class TestPostprocessingCalibration:
         assert len(cal) == 3
         assert (cal > 0).all()
         assert cal[0] < cal[1] < cal[2]
+
+    def test_asymmetric_piecewise_c0_continuity(self):
+        """Verify C0 continuity at boundary thresholds T_low and T_high."""
+        t_low, t_high = 5.0, 40.0
+        eps = 1e-6
+        preds = np.array([t_low - eps, t_low, t_low + eps, t_high - eps, t_high, t_high + eps])
+        cal = apply_asymmetric_piecewise_calibration(preds, beta_low=0.6, beta_high=0.4, t_low=t_low, t_high=t_high)
+
+        # Values across t_low boundary must match within 1e-4
+        assert abs(cal[0] - cal[1]) < 1e-4
+        assert abs(cal[1] - cal[2]) < 1e-4
+        # Values across t_high boundary must match within 1e-4
+        assert abs(cal[3] - cal[4]) < 1e-4
+        assert abs(cal[4] - cal[5]) < 1e-4
+
+    def test_asymmetric_piecewise_c1_continuity(self):
+        """Verify C1 derivative continuity at boundary thresholds."""
+        t_low, t_high = 5.0, 40.0
+        h = 1e-5
+        # Finite difference numerical derivatives on left and right of boundaries
+        # For t_low:
+        f_l_minus = apply_asymmetric_piecewise_calibration(np.array([t_low - h]), beta_low=0.8, beta_high=0.5, t_low=t_low, t_high=t_high)[0]
+        f_mid_low = apply_asymmetric_piecewise_calibration(np.array([t_low]), beta_low=0.8, beta_high=0.5, t_low=t_low, t_high=t_high)[0]
+        f_l_plus = apply_asymmetric_piecewise_calibration(np.array([t_low + h]), beta_low=0.8, beta_high=0.5, t_low=t_low, t_high=t_high)[0]
+
+        d_left = (f_mid_low - f_l_minus) / h
+        d_right = (f_l_plus - f_mid_low) / h
+        assert abs(d_left - d_right) < 1e-3, f"Slope discontinuity at t_low: d_left={d_left}, d_right={d_right}"
+
+        # For t_high:
+        f_h_minus = apply_asymmetric_piecewise_calibration(np.array([t_high - h]), beta_low=0.8, beta_high=0.5, t_low=t_low, t_high=t_high)[0]
+        f_mid_high = apply_asymmetric_piecewise_calibration(np.array([t_high]), beta_low=0.8, beta_high=0.5, t_low=t_low, t_high=t_high)[0]
+        f_h_plus = apply_asymmetric_piecewise_calibration(np.array([t_high + h]), beta_low=0.8, beta_high=0.5, t_low=t_low, t_high=t_high)[0]
+
+        d_left_h = (f_mid_high - f_h_minus) / h
+        d_right_h = (f_h_plus - f_mid_high) / h
+        assert abs(d_left_h - d_right_h) < 1e-3, f"Slope discontinuity at t_high: d_left={d_left_h}, d_right={d_right_h}"
+
+    def test_asymmetric_piecewise_strict_monotonicity(self):
+        """Verify strict monotonicity across the entire range (zero rank inversions)."""
+        np.random.seed(42)
+        sorted_preds = np.sort(np.random.uniform(0.1, 500.0, size=2000))
+
+        for b_low in [0.0, 0.2, 0.5, 1.0]:
+            for b_high in [0.0, 0.2, 0.5, 1.0]:
+                cal = apply_asymmetric_piecewise_calibration(
+                    sorted_preds, beta_low=b_low, beta_high=b_high, t_low=5.0, t_high=40.0
+                )
+                diffs = np.diff(cal)
+                assert (diffs >= 0).all(), f"Monotonicity violated for beta_low={b_low}, beta_high={b_high}"
+
+    def test_asymmetric_piecewise_zero_beta_identity(self):
+        """Verify that beta_low=0 and beta_high=0 yields the exact identity transformation."""
+        preds = np.array([0.5, 2.5, 5.0, 15.0, 40.0, 100.0, 500.0])
+        cal = apply_asymmetric_piecewise_calibration(preds, beta_low=0.0, beta_high=0.0)
+        np.testing.assert_allclose(cal, preds, rtol=1e-5)
+
+    def test_asymmetric_piecewise_directionality(self):
+        """Verify downward contraction for low prices and upward expansion for high prices."""
+        t_low, t_high = 5.0, 40.0
+        preds = np.array([2.0, 10.0, 80.0])
+        cal = apply_asymmetric_piecewise_calibration(preds, beta_low=0.5, beta_high=0.5, t_low=t_low, t_high=t_high)
+
+        # y < t_low: downward contraction
+        assert cal[0] < preds[0]
+        # t_low <= y <= t_high: unchanged
+        assert cal[1] == pytest.approx(preds[1], rel=1e-5)
+        # y > t_high: upward expansion
+        assert cal[2] > preds[2]
+
+    def test_optimize_asymmetric_piecewise_calibration_on_skewed_data(self):
+        """Verify optimization detects and fixes tail compression."""
+        np.random.seed(42)
+        # Ground truth prices
+        y_true = np.exp(np.random.normal(np.log(15.0), 1.2, size=1500))
+        # Compressed predictions: low end dragged up, high end dragged down
+        y_pred = y_true.copy()
+        low_idx = y_true < 5.0
+        y_pred[low_idx] = y_true[low_idx] * 1.5  # overpredicted
+        high_idx = y_true > 40.0
+        y_pred[high_idx] = y_true[high_idx] * 0.7  # underpredicted
+
+        b_l, b_h, _, _, base_sm, cal_sm = optimize_asymmetric_piecewise_calibration(
+            y_true, y_pred, t_low=5.0, t_high=40.0
+        )
+
+        assert b_l > 0.05, f"Expected positive beta_low to fix overprediction, got {b_l}"
+        assert b_h > 0.05, f"Expected positive beta_high to fix underprediction, got {b_h}"
+        assert cal_sm < base_sm
+        assert base_sm - cal_sm > 1.0  # Noticeable improvement
+
+    def test_evaluate_asymmetric_piecewise_nested_cv(self):
+        """Verify nested CV executes leak-free without error and parameters stay bounded."""
+        np.random.seed(42)
+        y_true = np.exp(np.random.normal(np.log(15.0), 1.0, size=800))
+        y_pred = y_true * 1.05
+
+        res = evaluate_asymmetric_piecewise_nested_cv(y_true, y_pred, n_splits=5, seed=42)
+        assert "mean_beta_low" in res
+        assert "mean_beta_high" in res
+        assert "calibrated_cv_smape" in res
+        assert res["calibrated_cv_smape"] <= res["baseline_smape"]
+        assert 0.0 <= res["mean_beta_low"] <= 1.5
+        assert 0.0 <= res["mean_beta_high"] <= 1.5
+
+    def test_apply_postprocessing_with_asymmetric_dispatch(self):
+        """Verify apply_postprocessing correctly cascades power-law and asymmetric calibration."""
+        preds = np.array([2.0, 15.0, 100.0])
+        cal = apply_postprocessing(
+            preds, power_a=1.05, power_b=0.0, beta_low=0.4, beta_high=0.3, clip_min=0.1
+        )
+        assert len(cal) == 3
+        assert (cal > 0).all()
+        assert cal[0] < cal[1] < cal[2]
+

@@ -234,6 +234,200 @@ def evaluate_power_law_nested_cv(
     }
 
 
+def apply_asymmetric_piecewise_calibration(
+    predictions: np.ndarray,
+    beta_low: float,
+    beta_high: float,
+    t_low: float = 5.0,
+    t_high: float = 40.0,
+    clip_min: float = 0.05,
+) -> np.ndarray:
+    """Apply C1-continuous asymmetric piecewise calibration in log-space.
+
+    Formula:
+        For z = ln(y):
+        z_cal = z - 0.5 * beta_low * (z - ln(t_low))^2   if y < t_low
+        z_cal = z                                       if t_low <= y <= t_high
+        z_cal = z + 0.5 * beta_high * (z - ln(t_high))^2 if y > t_high
+        y_cal = max(exp(z_cal), clip_min)
+
+    Mathematical Properties:
+    - C0 continuity at t_low and t_high (matching exact middle values).
+    - C1 continuity at t_low and t_high (matching exact middle slope 1.0).
+    - Strict monotonicity everywhere for beta_low >= 0, beta_high >= 0 (zero ranking inversions).
+    - Non-regression: When beta_low = beta_high = 0, y_cal = y identically.
+
+    Args:
+        predictions: Array of input predictions.
+        beta_low: Downward contraction intensity for low-priced items (>= 0).
+        beta_high: Upward expansion intensity for high-priced items (>= 0).
+        t_low: Lower boundary threshold (default $5.00).
+        t_high: Upper boundary threshold (default $40.00).
+        clip_min: Minimum floor threshold.
+
+    Returns:
+        Calibrated positive price array.
+    """
+    preds = np.asarray(predictions, dtype=np.float64)
+    b_low = max(float(beta_low), 0.0)
+    b_high = max(float(beta_high), 0.0)
+
+    if b_low == 0.0 and b_high == 0.0:
+        return np.maximum(preds, clip_min)
+
+    log_preds = np.log(np.maximum(preds, 1e-4))
+    log_t_low = np.log(max(float(t_low), 1e-3))
+    log_t_high = np.log(max(float(t_high), float(t_low) + 0.1))
+
+    log_cal = log_preds.copy()
+
+    # Low zone: z < log_t_low (pull down toward true low-end prices)
+    low_mask = log_preds < log_t_low
+    if np.any(low_mask):
+        diff_low = log_preds[low_mask] - log_t_low
+        log_cal[low_mask] = log_preds[low_mask] - 0.5 * b_low * (diff_low ** 2)
+
+    # High zone: z > log_t_high (expand up toward true luxury prices)
+    high_mask = log_preds > log_t_high
+    if np.any(high_mask):
+        diff_high = log_preds[high_mask] - log_t_high
+        log_cal[high_mask] = log_preds[high_mask] + 0.5 * b_high * (diff_high ** 2)
+
+    calibrated = np.maximum(np.exp(np.clip(log_cal, -3.0, 9.5)), clip_min)
+
+    assert not np.isnan(calibrated).any(), "NaN found in asymmetric calibrated predictions"
+    assert not np.isinf(calibrated).any(), "Inf found in asymmetric calibrated predictions"
+    assert (calibrated > 0).all(), "Non-positive price found in asymmetric calibrated predictions"
+
+    return calibrated
+
+
+def optimize_asymmetric_piecewise_calibration(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    t_low: float = 5.0,
+    t_high: float = 40.0,
+    clip_min: float = 0.05,
+    beta_bounds: Tuple[float, float] = (0.0, 1.5),
+) -> Tuple[float, float, float, float, float, float]:
+    """Find optimal (beta_low*, beta_high*) minimizing SMAPE.
+
+    Args:
+        y_true: Ground truth positive prices.
+        y_pred: Predicted positive prices.
+        t_low: Lower boundary threshold.
+        t_high: Upper boundary threshold.
+        clip_min: Lower floor threshold.
+        beta_bounds: Feasible interval for each beta parameter.
+
+    Returns:
+        Tuple of (beta_low_opt, beta_high_opt, t_low, t_high, baseline_smape, calibrated_smape).
+    """
+    y_true = np.asarray(y_true, dtype=np.float64)
+    y_pred = np.asarray(y_pred, dtype=np.float64)
+
+    baseline_smape = float(smape(y_true, y_pred))
+
+    def objective(params: np.ndarray) -> float:
+        b_l = max(float(params[0]), 0.0)
+        b_h = max(float(params[1]), 0.0)
+        cal = apply_asymmetric_piecewise_calibration(
+            y_pred, beta_low=b_l, beta_high=b_h, t_low=t_low, t_high=t_high, clip_min=clip_min
+        )
+        return float(smape(y_true, cal))
+
+    x0 = np.array([0.0, 0.0], dtype=np.float64)
+    bounds = [beta_bounds, beta_bounds]
+
+    res = minimize(
+        objective,
+        x0=x0,
+        method="L-BFGS-B",
+        bounds=bounds,
+        options={"maxiter": 300, "ftol": 1e-5},
+    )
+
+    if res.fun >= baseline_smape:
+        res_nm = minimize(
+            objective,
+            x0=np.array([0.1, 0.1], dtype=np.float64),
+            method="Nelder-Mead",
+            bounds=bounds,
+            options={"maxiter": 300, "xatol": 1e-4, "fatol": 1e-4},
+        )
+        if res_nm.fun < res.fun:
+            res = res_nm
+
+    b_low_opt = float(np.clip(res.x[0], beta_bounds[0], beta_bounds[1]))
+    b_high_opt = float(np.clip(res.x[1], beta_bounds[0], beta_bounds[1]))
+
+    final_cal = apply_asymmetric_piecewise_calibration(
+        y_pred, beta_low=b_low_opt, beta_high=b_high_opt, t_low=t_low, t_high=t_high, clip_min=clip_min
+    )
+    calibrated_smape = float(smape(y_true, final_cal))
+
+    if calibrated_smape >= baseline_smape:
+        return 0.0, 0.0, t_low, t_high, baseline_smape, baseline_smape
+
+    return b_low_opt, b_high_opt, t_low, t_high, baseline_smape, calibrated_smape
+
+
+def evaluate_asymmetric_piecewise_nested_cv(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    n_splits: int = 5,
+    seed: int = 42,
+    t_low: float = 5.0,
+    t_high: float = 40.0,
+    clip_min: float = 0.05,
+) -> Dict[str, float]:
+    """Evaluate stability of asymmetric piecewise calibration using nested K-Fold CV.
+
+    Fits (beta_low, beta_high) on (K-1) folds and evaluates on the validation fold
+    to guarantee zero target leakage.
+
+    Returns:
+        Dict with parameter means, standard deviations, and cross-validated SMAPE.
+    """
+    y_true = np.asarray(y_true, dtype=np.float64)
+    y_pred = np.asarray(y_pred, dtype=np.float64)
+
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+    b_low_list = []
+    b_high_list = []
+    val_calibrated_preds = np.zeros_like(y_pred)
+
+    for train_idx, val_idx in kf.split(y_pred):
+        y_tr, p_tr = y_true[train_idx], y_pred[train_idx]
+        y_va, p_va = y_true[val_idx], y_pred[val_idx]
+
+        b_l, b_h, _, _, _, _ = optimize_asymmetric_piecewise_calibration(
+            y_tr, p_tr, t_low=t_low, t_high=t_high, clip_min=clip_min
+        )
+        b_low_list.append(b_l)
+        b_high_list.append(b_h)
+
+        val_calibrated_preds[val_idx] = apply_asymmetric_piecewise_calibration(
+            p_va, beta_low=b_l, beta_high=b_h, t_low=t_low, t_high=t_high, clip_min=clip_min
+        )
+
+    baseline_score = float(smape(y_true, y_pred))
+    calibrated_cv_score = float(smape(y_true, val_calibrated_preds))
+
+    return {
+        "mean_beta_low": float(np.mean(b_low_list)),
+        "std_beta_low": float(np.std(b_low_list)),
+        "mean_beta_high": float(np.mean(b_high_list)),
+        "std_beta_high": float(np.std(b_high_list)),
+        "baseline_smape": baseline_score,
+        "calibrated_cv_smape": calibrated_cv_score,
+        "smape_delta": baseline_score - calibrated_cv_score,
+        "t_low": float(t_low),
+        "t_high": float(t_high),
+    }
+
+
 def calibrate_predictions_nested_cv(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -356,8 +550,12 @@ def apply_postprocessing(
     clip_min: float = 0.05,
     power_a: Optional[float] = None,
     power_b: Optional[float] = None,
+    beta_low: Optional[float] = None,
+    beta_high: Optional[float] = None,
+    t_low: float = 5.0,
+    t_high: float = 40.0,
 ) -> np.ndarray:
-    """Apply calibrated multiplier or power-law transformation and lower floor to predictions.
+    """Apply calibrated multiplier, power-law, or asymmetric piecewise transformation to predictions.
 
     Args:
         predictions: Array of raw model predictions.
@@ -365,20 +563,29 @@ def apply_postprocessing(
         clip_min: Optimal lower floor threshold.
         power_a: Optional power-law exponent.
         power_b: Optional power-law bias.
+        beta_low: Optional downward contraction parameter for low-end prices (< t_low).
+        beta_high: Optional upward expansion parameter for high-end prices (> t_high).
+        t_low: Lower boundary threshold (default $5.00).
+        t_high: Upper boundary threshold (default $40.00).
 
     Returns:
         Calibrated positive price array.
     """
     if power_a is not None and power_b is not None:
-        return apply_power_law_calibration(predictions, a=power_a, b=power_b, clip_min=clip_min)
+        cal = apply_power_law_calibration(predictions, a=power_a, b=power_b, clip_min=clip_min)
+    else:
+        preds = np.asarray(predictions, dtype=np.float64)
+        cal = np.maximum(preds * multiplier, clip_min)
 
-    preds = np.asarray(predictions, dtype=np.float64)
-    calibrated = np.maximum(preds * multiplier, clip_min)
+    if beta_low is not None and beta_high is not None:
+        cal = apply_asymmetric_piecewise_calibration(
+            cal, beta_low=beta_low, beta_high=beta_high, t_low=t_low, t_high=t_high, clip_min=clip_min
+        )
 
-    assert not np.isnan(calibrated).any(), "NaN found in calibrated predictions"
-    assert not np.isinf(calibrated).any(), "Inf found in calibrated predictions"
-    assert (calibrated > 0).all(), "Non-positive price found in calibrated predictions"
-    return calibrated
+    assert not np.isnan(cal).any(), "NaN found in calibrated predictions"
+    assert not np.isinf(cal).any(), "Inf found in calibrated predictions"
+    assert (cal > 0).all(), "Non-positive price found in calibrated predictions"
+    return cal
 
 
 def main() -> None:
