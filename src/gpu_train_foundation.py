@@ -78,6 +78,10 @@ def main():
     parser.add_argument("--modal_tower_target", default="log", choices=["log1p", "log"], help="Target representation for Modal Tower")
     parser.add_argument("--iqr_trim_multiplier", type=float, default=3.5, help="IQR multiplier for outlier trimming on training folds (0 to disable)")
     parser.add_argument("--use_cached_adapters", action="store_true", default=False, help="Load cached neural adapter predictions if available")
+    parser.add_argument("--use_tier_classifiers", action="store_true", default=True, help="Train two-stage extreme price-tier classifiers (budget/luxury)")
+    parser.add_argument("--skip_tier_classifiers", action="store_true", default=False, help="Skip extreme tier classifiers")
+    parser.add_argument("--budget_tier_threshold", type=float, default=4.0, help="Price threshold for budget/sample classifier (default $4.00)")
+    parser.add_argument("--luxury_tier_threshold", type=float, default=50.0, help="Price threshold for luxury/bulk classifier (default $50.00)")
     parser.add_argument("--subset", type=int, default=None, help="Train and evaluate on a subset of N samples for fast benchmarking (e.g. 10000)")
     parser.add_argument("--skip_visual_metadata", action="store_true", default=False, help="Skip extracting 8 PIL image metadata properties from disk")
     args = parser.parse_args()
@@ -353,7 +357,38 @@ def main():
     )
     X_text_test, _ = extract_text_features(test_struct["catalog_content"], vectorizer=tfidf)
 
-    # LightGBM: Strictly sparse CSR (TF-IDF + physical numerics + knn) for 3x faster histogram splits
+    # 3d. Two-Stage Extreme Price-Tier Classifiers (Budget vs Luxury)
+    if args.use_tier_classifiers and not args.skip_tier_classifiers:
+        from src.tier_classifiers import train_extreme_tier_classifiers_cv
+        print("\n[3d/5] Training 5-Fold OOF Extreme Price-Tier Classifiers...", flush=True)
+        X_base_tr = build_feature_matrix(X_text_train, X_num_train, vision_svd_features=None)
+        X_base_te = build_feature_matrix(X_text_test, X_num_test, vision_svd_features=None)
+
+        tier_oof_feat, tier_te_feat, _, _, tier_metrics = train_extreme_tier_classifiers_cv(
+            X_train=X_base_tr,
+            y_train=y_train,
+            X_test=X_base_te,
+            cv_splits=cv_splits,
+            budget_threshold=args.budget_tier_threshold,
+            luxury_threshold=args.luxury_tier_threshold,
+            n_estimators=160,
+            learning_rate=0.08,
+            num_leaves=31,
+            random_state=42,
+            verbose=True,
+        )
+
+        tier_cols = ["prob_budget_tier", "prob_luxury_tier", "logit_budget_tier", "logit_luxury_tier"]
+        for idx, col_name in enumerate(tier_cols):
+            train_struct[col_name] = tier_oof_feat[:, idx]
+            test_struct[col_name] = tier_te_feat[:, idx]
+            num_cols.append(col_name)
+
+        X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
+        X_num_test = build_numeric_matrix(test_struct, columns=num_cols)
+        print(f"Added 4 extreme tier classification features to numeric matrix (new dim: {X_num_train.shape[1]})", flush=True)
+
+    # LightGBM: Strictly sparse CSR (TF-IDF + physical numerics + knn + tier probs) for 3x faster histogram splits
     X_train_lgbm = build_feature_matrix(X_text_train, X_num_train, vision_svd_features=None)
     X_test_lgbm = build_feature_matrix(X_text_test, X_num_test, vision_svd_features=None)
     print(f"LightGBM Sparse Feature Matrix Shape: {X_train_lgbm.shape}", flush=True)
