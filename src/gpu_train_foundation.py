@@ -389,9 +389,10 @@ def main():
             cv_splits=cv_splits,
             budget_threshold=args.budget_tier_threshold,
             luxury_threshold=args.luxury_tier_threshold,
-            n_estimators=160,
+            n_estimators=80,
             learning_rate=0.08,
             num_leaves=31,
+            n_jobs=8,
             random_state=42,
             verbose=True,
         )

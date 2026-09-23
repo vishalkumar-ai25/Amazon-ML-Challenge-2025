@@ -44,9 +44,10 @@ def train_extreme_tier_classifiers_cv(
     cv_splits: List[Tuple[np.ndarray, np.ndarray]],
     budget_threshold: float = 4.0,
     luxury_threshold: float = 50.0,
-    n_estimators: int = 160,
+    n_estimators: int = 80,
     learning_rate: float = 0.08,
     num_leaves: int = 31,
+    n_jobs: int = 8,
     random_state: int = 42,
     verbose: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, float]]:
@@ -62,6 +63,7 @@ def train_extreme_tier_classifiers_cv(
         n_estimators: Maximum trees per fold.
         learning_rate: LightGBM learning rate.
         num_leaves: Tree complexity.
+        n_jobs: CPU threads for LightGBM (8 is optimal for avoiding NUMA memory bus thrashing).
         random_state: Random seed.
         verbose: Whether to log fold progress.
 
@@ -116,9 +118,9 @@ def train_extreme_tier_classifiers_cv(
                 "num_leaves": num_leaves,
                 "n_estimators": n_estimators,
                 "subsample": 0.85,
-                "colsample_bytree": 0.85,
+                "colsample_bytree": 0.75,
                 "random_state": random_state + fold,
-                "n_jobs": -1,
+                "n_jobs": n_jobs,
                 "verbose": -1,
             }
 
