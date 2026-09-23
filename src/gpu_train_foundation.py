@@ -200,6 +200,11 @@ def main():
             if args.subset < len(test_text_emb):
                 test_text_emb = test_text_emb[:args.subset]
         print(f"Loaded text embeddings shape: train={train_text_emb.shape}, test={test_text_emb.shape}")
+        if len(train_text_emb) < len(train_df):
+            raise ValueError(
+                f"Embedding length mismatch: {train_emb_file} has {len(train_text_emb)} rows, but train dataset requires {len(train_df)} rows. "
+                f"The cached embeddings may be from a subset run. Please re-run embedding extraction."
+            )
     else:
         print(f"\n[2/5] Text foundation embeddings not found at {train_emb_file}!")
         print("Falling back to TruncatedSVD on TF-IDF for adapter input...")
@@ -382,7 +387,10 @@ def main():
             test_siglip_txt = np.load(te_stxt_p)
             if args.subset is not None:
                 train_siglip_txt = train_siglip_txt[:args.subset]
-                test_siglip_txt = test_siglip_txt[:args.subset]
+            if len(train_siglip_txt) < len(train_df):
+                print(f"Warning: SigLIP text embeddings have {len(train_siglip_txt)} rows but train dataset requires {len(train_df)} rows. Skipping short cache.", flush=True)
+                train_siglip_txt = None
+                test_siglip_txt = None
             break
 
     if args.use_cached_adapters and os.path.exists(adapter_cache_file):

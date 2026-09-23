@@ -321,6 +321,17 @@ def main():
         if args.subset < len(test_df):
             test_df = test_df.iloc[:args.subset].reset_index(drop=True)
 
+    def is_cache_valid(path: str, expected_rows: int) -> bool:
+        if not os.path.exists(path):
+            return False
+        try:
+            arr = np.load(path, mmap_mode="r")
+            return len(arr) >= expected_rows
+        except Exception:
+            return False
+
+    expected_len = args.subset if args.subset is not None else len(train_df)
+
     # 1. Primary Text embeddings (Qwen, BGE, etc.)
     if not args.vision_only:
         print("Extracting structured prompt fields...")
@@ -331,8 +342,8 @@ def main():
         train_out_text = os.path.join(out_dir, f"train_text_{tag}.npy")
         test_out_text = os.path.join(out_dir, f"test_text_{tag}.npy")
 
-        if not os.path.exists(train_out_text) or not os.path.exists(test_out_text):
-            print(f"\n[Text] Extracting text embeddings using {args.model}...")
+        if not is_cache_valid(train_out_text, expected_len) or not is_cache_valid(test_out_text, expected_len):
+            print(f"\n[Text] Extracting text embeddings using {args.model} ({expected_len} samples)...")
             train_emb = extract_text_embeddings_hf(
                 train_struct["llm_prompt"],
                 model_name=args.model,
@@ -351,7 +362,7 @@ def main():
             print(f"Saved: {train_out_text} shape: {train_emb.shape}")
             print(f"Saved: {test_out_text} shape: {test_emb.shape}")
         else:
-            print(f"Found existing cached text embeddings in {out_dir}")
+            print(f"Found existing cached text embeddings ({expected_len}+ rows) in {out_dir}")
 
     # 1b. SigLIP Text embeddings (multimodal dual text representation)
     if args.siglip_text:
@@ -359,8 +370,8 @@ def main():
         train_out_stxt = os.path.join(out_dir, f"train_text_siglip.npy")
         test_out_stxt = os.path.join(out_dir, f"test_text_siglip.npy")
 
-        if not os.path.exists(train_out_stxt) or not os.path.exists(test_out_stxt):
-            print(f"\n[SigLIP Text] Extracting SigLIP text embeddings using {args.siglip_model}...")
+        if not is_cache_valid(train_out_stxt, expected_len) or not is_cache_valid(test_out_stxt, expected_len):
+            print(f"\n[SigLIP Text] Extracting SigLIP text embeddings using {args.siglip_model} ({expected_len} samples)...")
             train_struct = extract_structured_features(train_df) if "train_struct" not in locals() else train_struct
             test_struct = extract_structured_features(test_df) if "test_struct" not in locals() else test_struct
 

@@ -73,16 +73,36 @@ fi
 TEXT_MODEL="Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 TEXT_TAG="gte_qwen2_1_5b_instruct"
 
+EXPECTED_ROWS=${1:-75000}
+
+check_cache_rows() {
+    local file="$1"
+    local min_rows="$2"
+    python -c "
+import os, numpy as np, sys
+path = '$file'
+if not os.path.exists(path):
+    sys.exit(1)
+try:
+    arr = np.load(path, mmap_mode='r')
+    if len(arr) >= int('$min_rows'):
+        sys.exit(0)
+    sys.exit(1)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null
+}
+
 # Check if Qwen2.5-3B exists instead
-if [ -f "data/embeddings/train_text_qwen2_5_3b.npy" ]; then
+if check_cache_rows "data/embeddings/train_text_qwen2_5_3b.npy" "$EXPECTED_ROWS"; then
     TEXT_MODEL="Qwen/Qwen2.5-3B"
     TEXT_TAG="qwen2_5_3b"
-    echo "Found existing Qwen2.5-3B text embeddings tag: $TEXT_TAG"
-elif [ -f "data/embeddings/train_text_${TEXT_TAG}.npy" ]; then
-    echo "Found existing GTE-Qwen text embeddings tag: $TEXT_TAG"
+    echo "Found existing Qwen2.5-3B text embeddings tag: $TEXT_TAG ($EXPECTED_ROWS+ rows)"
+elif check_cache_rows "data/embeddings/train_text_${TEXT_TAG}.npy" "$EXPECTED_ROWS"; then
+    echo "Found existing GTE-Qwen text embeddings tag: $TEXT_TAG ($EXPECTED_ROWS+ rows)"
 else
     echo ""
-    echo "=== Extracting Qwen Text Foundation Embeddings ($TEXT_MODEL) ==="
+    echo "=== Extracting Qwen Text Foundation Embeddings ($TEXT_MODEL) for $EXPECTED_ROWS samples ==="
     python -u -m src.extract_embeddings \
         --model "$TEXT_MODEL" \
         --batch_size 64 \
@@ -91,15 +111,15 @@ else
 fi
 
 # Check / Extract SigLIP Text Embeddings
-if [ ! -f "data/embeddings/train_text_siglip.npy" ]; then
+if check_cache_rows "data/embeddings/train_text_siglip.npy" "$EXPECTED_ROWS"; then
+    echo "Found existing SigLIP text embeddings at data/embeddings/train_text_siglip.npy ($EXPECTED_ROWS+ rows)"
+else
     echo ""
-    echo "=== Extracting SigLIP Text Embeddings (google/siglip-base-patch16-224) ==="
+    echo "=== Extracting SigLIP Text Embeddings (google/siglip-base-patch16-224) for $EXPECTED_ROWS samples ==="
     python -u -m src.extract_embeddings \
         --siglip_text \
         --batch_size 128 \
         $SUBSET_EXTRACT_ARG
-else
-    echo "Found existing SigLIP text embeddings at data/embeddings/train_text_siglip.npy"
 fi
 
 # 4. Launch Milestone 8 GPU Training Pipeline
