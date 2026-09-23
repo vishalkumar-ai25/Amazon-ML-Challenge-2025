@@ -61,9 +61,19 @@
   - Uncalibrated 5-Way Blended Ensemble OOF SMAPE: **41.64%**.
   - **Final Calibrated Ensemble OOF SMAPE (Power-Law Calibration):** **41.48% SMAPE**! (Defeated scalar multiplier 41.62% and stacking meta-learner 41.67%).
   - Deciles 4–5 core price range: **28.35% – 28.50% SMAPE**!
-- **Milestone 6 (Podium Leap: Drop Ridge, XGBoost GPU, Similarity-Weighted k-NN k=10, Dual Vision SigLIP+DINOv2): READY FOR REMOTE GPU TRAINING**
-  - Architecture: Complete removal of Ridge passenger + XGBoost GPU (1200 trees, depth 6, lr 0.06, hist tree method) for depth-wise tree diversity against LightGBM's leaf-wise trees + Expanded FAISS k-NN ($k=10$, `knn_weighted_mean_log_price` similarity weighting, `knn_price_spread`) + Dual Vision Embeddings (SigLIP 768-d + DINOv2 768-d concatenated to 1536-d, 48-d TruncatedSVD for GBDTs, full 1536-d dynamic adapter) + Locked-in Continuous Log-Affine Power-Law Decile Calibration as primary post-processor.
-  - Test Suite: 139 passed, 3 skipped (100% passing across all 13 test files).
+- **Milestone 6 (Ablation & Discovery): COMPLETED**
+  - Architecture: Complete removal of Ridge passenger; attempted XGBoost GPU on 35k sparse TF-IDF (failed at 68.67% due to uniform L1 split variance and CPU-GPU DMatrix transfers; abandoned).
+- **Milestone 7 (State of the Art: Empirical Bayes Target Encoding, Dual Vision SigLIP+DINOv2, Clean GBDT/Neural Ensemble): COMPLETED & VERIFIED ON REMOTE GPU**
+  - Architecture: Empirical Bayes Out-of-Fold Target Encoding (`cat_oof_price`, `brand_oof_price` with $m=10$ prior smoothing) + Dual Vision Fusion (SigLIP 768-d + DINOv2 768-d $\to$ 1536-d, 48-d TruncatedSVD for GBDT) + 10-NN similarity-weighted price retrieval + Multi-pack double-multiplication fix (`is_wholesale_case`, `is_pallet`) + Dual Neural Adapters (SMAPE Loss + MAE Loss) + LightGBM (log-space SMAPE) + CatBoost GPU (MAE loss) + Continuous Log-Affine Power-Law Decile Calibration.
+  - LightGBM OOF SMAPE: **42.88%** (All-time personal best for single model!).
+  - CatBoost GPU OOF SMAPE: **42.98%** (Driven by 48-d dual vision SVD + target encoding).
+  - Neural Adapter (SMAPE loss): **47.63%**.
+  - Neural Adapter (MAE loss): **47.85%**.
+  - Optimal Ensemble Weights: **53.05% LightGBM + 22.73% CatBoost + 14.19% Adapter (SMAPE) + 10.04% Adapter (MAE)**.
+  - Multi-Model Blended Ensemble OOF SMAPE: **41.50%**.
+  - **Final Calibrated Ensemble OOF SMAPE (Continuous Power-Law Calibration):** **41.34% SMAPE**!
+  - Nested 5-Fold Cross-Validation: **41.34%** ($a=1.0424, b=-0.1304, \text{floor}=0.3923$, with near-zero variance: $\text{std}_a=0.0006, \text{std}_b=0.0021$).
+  - Test Submission: Verified exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server at `dataset/test_out.csv`.
 - **Official Competition Leaderboard Benchmarks (Target: < 40% SMAPE):**
   - **1st Place:** Team **Test Data** (IIT Patna) — **39.1969% SMAPE**
   - **2nd Place:** Team **Antrix** (TIET Patiala) — **39.2802% SMAPE**
