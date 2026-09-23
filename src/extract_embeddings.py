@@ -63,7 +63,22 @@ def extract_text_embeddings_hf(
 
     # Use bfloat16/float16 on CUDA for 2x speedup and 50% memory savings
     dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else (torch.float16 if device == "cuda" else torch.float32)
+
+    # Patch legacy DynamicCache methods for transformers >= 4.45 compatibility with Qwen models
+    try:
+        from transformers.cache_utils import DynamicCache
+        if not hasattr(DynamicCache, "get_usable_length"):
+            DynamicCache.get_usable_length = lambda self, seq_length=None, *args, **kwargs: self.get_seq_length() if hasattr(self, "get_seq_length") else (seq_length or 0)
+        if not hasattr(DynamicCache, "get_max_length"):
+            DynamicCache.get_max_length = lambda self, *args, **kwargs: getattr(self, "_max_length", None)
+        if not hasattr(DynamicCache, "seen_tokens"):
+            DynamicCache.seen_tokens = property(lambda self: self.get_seq_length() if hasattr(self, "get_seq_length") else 0)
+    except Exception:
+        pass
+
     model = AutoModel.from_pretrained(model_name, torch_dtype=dtype, trust_remote_code=True).to(device)
+    if hasattr(model, "config"):
+        model.config.use_cache = False
     model.eval()
 
     embeddings_list = []
@@ -80,7 +95,10 @@ def extract_text_embeddings_hf(
                 return_tensors="pt",
             ).to(device)
 
-            outputs = model(**encoded)
+            try:
+                outputs = model(**encoded, use_cache=False)
+            except TypeError:
+                outputs = model(**encoded)
             # Use mean pooling with attention mask (compatible with both encoder & decoder models)
             token_embeddings = outputs.last_hidden_state if hasattr(outputs, "last_hidden_state") else outputs[0]
             input_mask_expanded = encoded["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
