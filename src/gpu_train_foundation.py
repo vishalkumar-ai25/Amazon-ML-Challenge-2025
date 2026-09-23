@@ -83,6 +83,7 @@ def main():
     parser.add_argument("--skip_tier_classifiers", action="store_true", default=False, help="Skip extreme tier classifiers")
     parser.add_argument("--budget_tier_threshold", type=float, default=4.0, help="Price threshold for budget/sample classifier (default $4.00)")
     parser.add_argument("--luxury_tier_threshold", type=float, default=50.0, help="Price threshold for luxury/bulk classifier (default $50.00)")
+    parser.add_argument("--config", default="configs/default.yaml", help="Path to YAML configuration file")
     parser.add_argument("--subset", type=int, default=None, help="Train and evaluate on a subset of N samples for fast benchmarking (e.g. 10000)")
     parser.add_argument("--skip_visual_metadata", action="store_true", default=False, help="Skip extracting 8 PIL image metadata properties from disk")
     args = parser.parse_args()
@@ -92,6 +93,17 @@ def main():
     print("=" * 75)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg = {}
+    config_file = os.path.join(base_dir, args.config) if not os.path.isabs(args.config) else args.config
+    if os.path.exists(config_file):
+        try:
+            import yaml
+            with open(config_file, "r") as f:
+                cfg = yaml.safe_load(f) or {}
+            print(f"Loaded pipeline configuration from: {config_file}", flush=True)
+        except Exception as e:
+            print(f"Warning: Could not parse config file {config_file}: {e}", flush=True)
+
     train_path = os.path.join(base_dir, "dataset", "train.csv")
     test_path = os.path.join(base_dir, "dataset", "test.csv")
     out_path = os.path.join(base_dir, "dataset", "test_out.csv")
@@ -367,12 +379,16 @@ def main():
                 train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=32)
 
     # TF-IDF high-capacity representations for GBDT
-    print("Building high-capacity TF-IDF matrix for GBDT models...")
+    feat_cfg = cfg.get("features", {})
+    tfidf_max_features = feat_cfg.get("tfidf_max_features", 30000)
+    tfidf_ngram_range = tuple(feat_cfg.get("tfidf_ngram_range", [1, 2]))
+    tfidf_min_df = feat_cfg.get("tfidf_min_df", 3)
+    print(f"Building high-capacity TF-IDF matrix for GBDT models (max_features={tfidf_max_features})...")
     X_text_train, tfidf = extract_text_features(
         train_struct["catalog_content"],
-        max_features=30000,
-        ngram_range=(1, 2),
-        min_df=3,
+        max_features=tfidf_max_features,
+        ngram_range=tfidf_ngram_range,
+        min_df=tfidf_min_df,
     )
     X_text_test, _ = extract_text_features(test_struct["catalog_content"], vectorizer=tfidf)
 
@@ -478,6 +494,7 @@ def main():
                 siglip_tr_in = tr_siglip[:args.subset] if (siglip_tr and dinov2_tr and want_dual and args.subset) else (tr_siglip if (siglip_tr and dinov2_tr and want_dual) else train_vision_emb)
                 siglip_te_in = te_siglip[:args.subset] if (siglip_tr and dinov2_tr and want_dual and args.subset) else (te_siglip if (siglip_tr and dinov2_tr and want_dual) else test_vision_emb)
 
+                mt_cfg = cfg.get("models", {}).get("modal_tower", {})
                 oof_modal_tower, test_modal_tower, mt_scores = train_modal_tower_cv(
                     train_qwen_emb=train_text_emb,
                     y_train=y_train,
@@ -491,15 +508,16 @@ def main():
                     train_tabular=X_num_train.toarray(),
                     test_tabular=X_num_test.toarray(),
                     cv_splits=cv_splits,
-                    epochs=args.modal_tower_epochs,
-                    batch_size=args.batch_size,
-                    lr=args.modal_tower_lr,
-                    loss_type=args.modal_tower_loss,
-                    target_type=args.modal_tower_target,
+                    epochs=mt_cfg.get("epochs", args.modal_tower_epochs),
+                    batch_size=mt_cfg.get("batch_size", args.batch_size),
+                    lr=mt_cfg.get("lr", args.modal_tower_lr),
+                    loss_type=mt_cfg.get("loss", args.modal_tower_loss),
+                    target_type=mt_cfg.get("target", args.modal_tower_target),
                 )
                 print(f"\nOverall OOF Modal Tower Adapter SMAPE: {smape(y_train, oof_modal_tower):.2f}%", flush=True)
 
             # 4b. Standard Neural Pricing Adapter (Differentiable SMAPE Loss)
+            ad_smape_cfg = cfg.get("models", {}).get("adapter_smape", {})
             if not args.skip_smape_adapter:
                 print("\n[4b/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
                 oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
@@ -511,13 +529,14 @@ def main():
                     train_tabular=X_num_train.toarray(),
                     test_tabular=X_num_test.toarray(),
                     cv_splits=cv_splits,
-                    epochs=args.epochs,
-                    batch_size=args.batch_size,
-                    lr=args.lr,
-                    loss_type="smape",
+                    epochs=ad_smape_cfg.get("epochs", args.epochs),
+                    batch_size=ad_smape_cfg.get("batch_size", args.batch_size),
+                    lr=ad_smape_cfg.get("lr", args.lr),
+                    loss_type=ad_smape_cfg.get("loss_type", "smape"),
                 )
                 print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
 
+            ad_mae_cfg = cfg.get("models", {}).get("adapter_mae", {})
             if args.train_mae_adapter:
                 print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
                 oof_adapter_mae, test_adapter_mae, _ = train_adapter_cv(
@@ -529,10 +548,10 @@ def main():
                     train_tabular=X_num_train.toarray(),
                     test_tabular=X_num_test.toarray(),
                     cv_splits=cv_splits,
-                    epochs=min(args.epochs, 25),
-                    batch_size=args.batch_size,
-                    lr=args.lr,
-                    loss_type="mae",
+                    epochs=ad_mae_cfg.get("epochs", min(args.epochs, 25)),
+                    batch_size=ad_mae_cfg.get("batch_size", args.batch_size),
+                    lr=ad_mae_cfg.get("lr", args.lr),
+                    loss_type=ad_mae_cfg.get("loss_type", "mae"),
                 )
                 print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
 
@@ -585,26 +604,28 @@ def main():
         y_va_true = y_train[v_idx]
 
         # LightGBM: Trained directly with analytical SMAPE objective and evaluation
+        lgb_cfg = cfg.get("models", {}).get("lgbm", {}) or cfg.get("lgbm", {})
         m_lgbm = lgb.LGBMRegressor(
             objective=lgb_smape_objective,
-            n_estimators=1500,
-            learning_rate=0.05,
-            num_leaves=127,
-            min_child_samples=40,
-            feature_fraction=0.75,
-            bagging_fraction=0.8,
-            bagging_freq=5,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            random_state=42,
-            n_jobs=32,
-            verbose=-1,
+            n_estimators=lgb_cfg.get("n_estimators", 1500),
+            learning_rate=lgb_cfg.get("learning_rate", 0.05),
+            num_leaves=lgb_cfg.get("num_leaves", 127),
+            min_child_samples=lgb_cfg.get("min_child_samples", 40),
+            feature_fraction=lgb_cfg.get("feature_fraction", 0.75),
+            bagging_fraction=lgb_cfg.get("bagging_fraction", 0.8),
+            bagging_freq=lgb_cfg.get("bagging_freq", 5),
+            reg_alpha=lgb_cfg.get("reg_alpha", 0.1),
+            reg_lambda=lgb_cfg.get("reg_lambda", 1.0),
+            random_state=lgb_cfg.get("random_state", 42),
+            n_jobs=lgb_cfg.get("n_jobs", 32),
+            verbose=lgb_cfg.get("verbose", -1),
         )
+        lgb_es = lgb_cfg.get("early_stopping_rounds", 80)
         m_lgbm.fit(
             X_tr_lgbm, y_tr_log,
             eval_set=[(X_va_lgbm, y_va_log)],
             eval_metric=lgb_smape_eval,
-            callbacks=[lgb.early_stopping(80, verbose=False), lgb.log_evaluation(period=200)],
+            callbacks=[lgb.early_stopping(lgb_es, verbose=False), lgb.log_evaluation(period=200)],
         )
         val_pred_lgbm = np.maximum(np.exp(m_lgbm.predict(X_va_lgbm)), 0.01)
         oof_lgbm[v_idx] = val_pred_lgbm
@@ -612,14 +633,15 @@ def main():
         print(f"  [LightGBM SMAPE] Fold {fold+1} SMAPE: {smape(y_va_true, val_pred_lgbm):.2f}%", flush=True)
 
         # CatBoost (MAE Loss, on dense SVD features via GPU)
+        cb_cfg = cfg.get("models", {}).get("catboost", {})
         cb_kwargs = {
-            "loss_function": "MAE",
-            "iterations": 1200,
-            "learning_rate": 0.08,
-            "depth": 6,
-            "random_seed": 42,
-            "verbose": 200,
-            "early_stopping_rounds": 80,
+            "loss_function": cb_cfg.get("loss_function", "MAE"),
+            "iterations": cb_cfg.get("iterations", 1200),
+            "learning_rate": cb_cfg.get("learning_rate", 0.08),
+            "depth": cb_cfg.get("depth", 6),
+            "random_seed": cb_cfg.get("random_seed", 42),
+            "verbose": cb_cfg.get("verbose", 200),
+            "early_stopping_rounds": cb_cfg.get("early_stopping_rounds", 80),
             "task_type": catboost_task_type,
         }
         if catboost_task_type == "CPU":

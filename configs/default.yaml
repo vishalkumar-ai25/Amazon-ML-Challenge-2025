@@ -1,42 +1,122 @@
-# Amazon ML Challenge - Default Training Configuration
-# All hyperparameters in one place. No magic numbers in code.
+# Amazon ML Challenge 2025: Centralized Production Configuration
+# Single source of truth for Milestone 8 Multimodal SOTA Pipeline & Legacy GBDT Pipeline
 
 seed: 42
 n_folds: 5
 
-# Feature engineering
+# Global target transformation
+target:
+  transform: log
+  clip_min: 0.05
+  iqr_trim_multiplier: 3.5
+
+# Feature engineering configuration
 features:
-  tfidf_max_features: 15000
+  tfidf_max_features: 30000
   tfidf_ngram_range: [1, 2]
   tfidf_min_df: 3
+  knn_k: 10
+  target_encoding_m_prior: 10.0
+  n_vision_svd_components: 48
+  skip_visual_metadata: false
 
-# Target transformation
-target:
-  transform: log  # log(price) — minimizing MAE on log ≈ minimizing SMAPE
-  clip_min: 0.01
+# Extreme price-tier binary classifiers (Lever 2)
+tier_classifiers:
+  use_tier_classifiers: true
+  budget_threshold: 4.0
+  luxury_threshold: 50.0
+  n_estimators: 80
+  learning_rate: 0.08
+  num_leaves: 31
+  n_jobs: 8
 
-# LightGBM parameters
-lgbm:
-  objective: huber
-  metric: mae
-  boosting_type: gbdt
-  n_estimators: 2000
-  learning_rate: 0.05
-  num_leaves: 127
-  min_child_samples: 50
-  feature_fraction: 0.7
-  bagging_fraction: 0.8
-  bagging_freq: 5
-  reg_alpha: 0.1
-  reg_lambda: 1.0
-  verbose: -1
-  n_jobs: -1
-  random_state: 42
-  # Early stopping
-  early_stopping_rounds: 100
+# Model Architectures & Hyperparameters
+models:
+  # LightGBM Regression (Analytical SMAPE Objective)
+  lgbm:
+    objective: smape
+    boosting_type: gbdt
+    learning_rate: 0.05
+    num_leaves: 127
+    n_estimators: 1500
+    min_child_samples: 40
+    feature_fraction: 0.75
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    n_jobs: 32
+    early_stopping_rounds: 80
+    verbose: -1
+
+  # CatBoost GPU Regression (MAE Loss on dense 48-dim vision SVD)
+  catboost:
+    loss_function: MAE
+    iterations: 1200
+    learning_rate: 0.08
+    depth: 6
+    early_stopping_rounds: 80
+    random_seed: 42
+    verbose: 200
+    task_type: GPU
+
+  # Dedicated Modality-Specific Tower Adapter (Qwen, DINOv2, SigLIP text, SigLIP vision, Tabular)
+  modal_tower:
+    use_modal_tower: true
+    epochs: 30
+    lr: 0.0003
+    loss: huber
+    target: log
+    batch_size: 256
+    dropout: 0.1
+
+  # Multimodal Neural Pricing Adapter (Differentiable SMAPE Loss)
+  adapter_smape:
+    epochs: 35
+    lr: 0.001
+    batch_size: 256
+    loss_type: smape
+
+  # Neural Adapter (MAE Loss)
+  adapter_mae:
+    epochs: 25
+    lr: 0.001
+    batch_size: 256
+    loss_type: mae
+
+# Post-Processing Calibration & Alignment
+calibration:
+  primary_method: power_law
+  floor_search_range: [0.1, 2.0]
+  power_law_a_bounds: [0.7, 1.4]
+  power_law_b_bounds: [-1.5, 1.5]
+  asymmetric_t_low: 5.0
+  asymmetric_t_high: 40.0
+  distribution_alignment_weight: 0.10
 
 # Paths (relative to project root)
 paths:
   dataset_dir: dataset
   model_dir: models
+  embeddings_dir: data/embeddings
+  predictions_dir: data/predictions
   output_file: dataset/test_out.csv
+
+# Backwards compatibility block for legacy scripts and test fixtures
+lgbm:
+  objective: smape
+  metric: smape
+  boosting_type: gbdt
+  n_estimators: 1500
+  learning_rate: 0.05
+  num_leaves: 127
+  min_child_samples: 40
+  feature_fraction: 0.75
+  bagging_fraction: 0.8
+  bagging_freq: 5
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  verbose: -1
+  n_jobs: 32
+  random_state: 42
+  early_stopping_rounds: 80
