@@ -38,7 +38,7 @@ def extract_text_embeddings_hf(
     device: Optional[str] = None,
     max_length: int = 256,
 ) -> np.ndarray:
-    """Extract dense text representations using HuggingFace / SentenceTransformers.
+    """Extract dense text representations using HuggingFace models (Qwen, BGE, GTE, etc.).
 
     Args:
         texts: List or Series of prompt strings.
@@ -57,18 +57,20 @@ def extract_text_embeddings_hf(
         device = get_optimal_device()
 
     print(f"Loading text encoder: {model_name} on device: {device}...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
     # Use bfloat16/float16 on CUDA for 2x speedup and 50% memory savings
     dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else (torch.float16 if device == "cuda" else torch.float32)
-    model = AutoModel.from_pretrained(model_name, torch_dtype=dtype).to(device)
+    model = AutoModel.from_pretrained(model_name, torch_dtype=dtype, trust_remote_code=True).to(device)
     model.eval()
 
     embeddings_list = []
     n_samples = len(texts)
 
     with torch.no_grad():
-        for i in tqdm(range(0, n_samples, batch_size), desc="Extracting text embeddings"):
+        for i in tqdm(range(0, n_samples, batch_size), desc=f"Text emb ({clean_model_tag(model_name)})"):
             batch_texts = list(texts[i : i + batch_size])
             encoded = tokenizer(
                 batch_texts,
@@ -79,8 +81,8 @@ def extract_text_embeddings_hf(
             ).to(device)
 
             outputs = model(**encoded)
-            # Use mean pooling with attention mask
-            token_embeddings = outputs[0]  # First element of model_output contains all token embeddings
+            # Use mean pooling with attention mask (compatible with both encoder & decoder models)
+            token_embeddings = outputs.last_hidden_state if hasattr(outputs, "last_hidden_state") else outputs[0]
             input_mask_expanded = encoded["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
             sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
             sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
@@ -88,6 +90,66 @@ def extract_text_embeddings_hf(
 
             # L2 normalize embeddings
             normalized = torch.nn.functional.normalize(pooled, p=2, dim=1)
+            embeddings_list.append(normalized.cpu().to(torch.float32).numpy())
+
+    return np.vstack(embeddings_list)
+
+
+def extract_siglip_text_embeddings(
+    texts: Sequence[str],
+    model_name: str = "google/siglip-base-patch16-224",
+    batch_size: int = 128,
+    device: Optional[str] = None,
+    max_length: int = 64,
+) -> np.ndarray:
+    """Extract dense text representations using SigLIP text encoder.
+
+    Args:
+        texts: List or Series of prompt strings.
+        model_name: HuggingFace SigLIP model repo ID.
+        batch_size: Batch size for GPU inference.
+        device: 'cuda', 'mps', or 'cpu'. Auto-detects if None.
+        max_length: Maximum sequence length (SigLIP default is 64).
+
+    Returns:
+        (N, hidden_dim) float32 numpy array of normalized text embeddings.
+    """
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+
+    if device is None:
+        device = get_optimal_device()
+
+    print(f"Loading SigLIP text encoder: {model_name} on device: {device}...")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else (torch.float16 if device == "cuda" else torch.float32)
+    model = AutoModel.from_pretrained(model_name, torch_dtype=dtype).to(device)
+    model.eval()
+
+    embeddings_list = []
+    n_samples = len(texts)
+
+    with torch.no_grad():
+        for i in tqdm(range(0, n_samples, batch_size), desc="SigLIP text emb"):
+            batch_texts = list(texts[i : i + batch_size])
+            encoded = tokenizer(
+                batch_texts,
+                padding="max_length",
+                max_length=max_length,
+                truncation=True,
+                return_tensors="pt",
+            ).to(device)
+
+            if hasattr(model, "get_text_features"):
+                text_emb = model.get_text_features(**encoded)
+            elif hasattr(model, "text_model"):
+                text_out = model.text_model(**encoded)
+                text_emb = text_out.pooler_output if hasattr(text_out, "pooler_output") else text_out[0].mean(dim=1)
+            else:
+                outputs = model(**encoded)
+                text_emb = outputs.text_embeds if hasattr(outputs, "text_embeds") else outputs[0].mean(dim=1)
+
+            normalized = torch.nn.functional.normalize(text_emb, p=2, dim=-1)
             embeddings_list.append(normalized.cpu().to(torch.float32).numpy())
 
     return np.vstack(embeddings_list)
@@ -190,13 +252,17 @@ def clean_model_tag(model_name: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Extract Frozen Foundation Model Embeddings")
-    parser.add_argument("--model", default="BAAI/bge-large-en-v1.5", help="Text model repo ID")
+    parser.add_argument("--model", default="BAAI/bge-large-en-v1.5", help="Text model repo ID (e.g. Alibaba-NLP/gte-Qwen2-1.5B-instruct or Qwen/Qwen2.5-3B)")
     parser.add_argument("--batch_size", type=int, default=64, help="GPU batch size")
+    parser.add_argument("--max_length", type=int, default=256, help="Maximum sequence length")
     parser.add_argument("--output_dir", default="data/embeddings", help="Folder to save cached embeddings")
     parser.add_argument("--vision_model", default=None, help="Optional vision model ID (e.g. google/siglip-base-patch16-224 or facebook/dinov2-base)")
+    parser.add_argument("--siglip_text", action="store_true", help="Extract SigLIP text embeddings")
+    parser.add_argument("--siglip_model", default="google/siglip-base-patch16-224", help="SigLIP model ID for text embeddings")
     parser.add_argument("--image_dir", default="images", help="Folder containing downloaded images")
     parser.add_argument("--vision_only", action="store_true", help="Skip text extraction and only extract vision embeddings")
     parser.add_argument("--text_only", action="store_true", help="Skip vision extraction and only extract text embeddings")
+    parser.add_argument("--subset", type=int, default=None, help="Optional subset of samples for fast benchmark extraction")
     args = parser.parse_args()
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -209,7 +275,13 @@ def main():
     train_df = pd.read_csv(train_path)
     test_df = pd.read_csv(test_path)
 
-    # 1. Text embeddings
+    if args.subset is not None:
+        print(f">>> Fast Benchmark Mode: Slicing to first {args.subset} samples <<<", flush=True)
+        train_df = train_df.iloc[:args.subset].reset_index(drop=True)
+        if args.subset < len(test_df):
+            test_df = test_df.iloc[:args.subset].reset_index(drop=True)
+
+    # 1. Primary Text embeddings (Qwen, BGE, etc.)
     if not args.vision_only:
         print("Extracting structured prompt fields...")
         train_struct = extract_structured_features(train_df)
@@ -221,8 +293,18 @@ def main():
 
         if not os.path.exists(train_out_text) or not os.path.exists(test_out_text):
             print(f"\n[Text] Extracting text embeddings using {args.model}...")
-            train_emb = extract_text_embeddings_hf(train_struct["llm_prompt"], model_name=args.model, batch_size=args.batch_size)
-            test_emb = extract_text_embeddings_hf(test_struct["llm_prompt"], model_name=args.model, batch_size=args.batch_size)
+            train_emb = extract_text_embeddings_hf(
+                train_struct["llm_prompt"],
+                model_name=args.model,
+                batch_size=args.batch_size,
+                max_length=args.max_length,
+            )
+            test_emb = extract_text_embeddings_hf(
+                test_struct["llm_prompt"],
+                model_name=args.model,
+                batch_size=args.batch_size,
+                max_length=args.max_length,
+            )
 
             np.save(train_out_text, train_emb)
             np.save(test_out_text, test_emb)
@@ -230,6 +312,35 @@ def main():
             print(f"Saved: {test_out_text} shape: {test_emb.shape}")
         else:
             print(f"Found existing cached text embeddings in {out_dir}")
+
+    # 1b. SigLIP Text embeddings (multimodal dual text representation)
+    if args.siglip_text:
+        s_tag = clean_model_tag(args.siglip_model)
+        train_out_stxt = os.path.join(out_dir, f"train_text_siglip.npy")
+        test_out_stxt = os.path.join(out_dir, f"test_text_siglip.npy")
+
+        if not os.path.exists(train_out_stxt) or not os.path.exists(test_out_stxt):
+            print(f"\n[SigLIP Text] Extracting SigLIP text embeddings using {args.siglip_model}...")
+            train_struct = extract_structured_features(train_df) if "train_struct" not in locals() else train_struct
+            test_struct = extract_structured_features(test_df) if "test_struct" not in locals() else test_struct
+
+            train_stxt_emb = extract_siglip_text_embeddings(
+                train_struct["llm_prompt"],
+                model_name=args.siglip_model,
+                batch_size=args.batch_size * 2,
+            )
+            test_stxt_emb = extract_siglip_text_embeddings(
+                test_struct["llm_prompt"],
+                model_name=args.siglip_model,
+                batch_size=args.batch_size * 2,
+            )
+
+            np.save(train_out_stxt, train_stxt_emb)
+            np.save(test_out_stxt, test_stxt_emb)
+            print(f"Saved: {train_out_stxt} shape: {train_stxt_emb.shape}")
+            print(f"Saved: {test_out_stxt} shape: {test_stxt_emb.shape}")
+        else:
+            print(f"Found existing cached SigLIP text embeddings in {out_dir}")
 
     # 2. Vision embeddings (optional, supports single or comma-separated list like "google/siglip-base-patch16-224,facebook/dinov2-base")
     if args.vision_model and not args.text_only:

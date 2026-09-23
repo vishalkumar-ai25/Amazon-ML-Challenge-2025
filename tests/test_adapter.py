@@ -80,3 +80,58 @@ class TestNeuralAdapterTorch:
 
         assert output.shape == (batch_size,)
         assert not torch.isnan(output).any()
+
+    def test_modal_tower_adapter_forward(self):
+        import torch
+        from src.adapter import ModalTowerAdapter
+
+        model = ModalTowerAdapter(
+            qwen_dim=128,
+            dino_dim=64,
+            siglip_txt_dim=64,
+            siglip_img_dim=64,
+            tabular_dim=16,
+            tower_dim=32,
+            target_type="log1p",
+        )
+        model.eval()
+
+        batch_size = 4
+        qwen_emb = torch.randn(batch_size, 128)
+        dino_emb = torch.randn(batch_size, 64)
+        siglip_txt = torch.randn(batch_size, 64)
+        siglip_img = torch.randn(batch_size, 64)
+        tab_feat = torch.randn(batch_size, 16)
+
+        with torch.no_grad():
+            output = model(qwen_emb, dino_emb, siglip_txt, siglip_img, tab_feat)
+            prices = model.predict_price(output)
+
+        assert output.shape == (batch_size,)
+        assert prices.shape == (batch_size,)
+        assert (prices > 0).all()
+        assert not torch.isnan(prices).any()
+
+    def test_modal_tower_adapter_missing_image_mask(self):
+        import torch
+        from src.adapter import ModalTowerAdapter
+
+        model = ModalTowerAdapter(
+            qwen_dim=64,
+            dino_dim=32,
+            tower_dim=16,
+        )
+        model.eval()
+
+        batch_size = 2
+        qwen_emb = torch.randn(batch_size, 64)
+        # One valid image, one all-zero (missing) image
+        dino_emb = torch.randn(batch_size, 32)
+        dino_emb[1] = 0.0
+
+        with torch.no_grad():
+            output = model(qwen_emb, dino_emb)
+            prices = model.predict_price(output)
+
+        assert output.shape == (batch_size,)
+        assert (prices > 0).all()

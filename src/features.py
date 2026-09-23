@@ -260,6 +260,11 @@ def number_to_words(val: object) -> str:
         n = int(round(float(val)))
         if n in _NUM_WORDS:
             return _NUM_WORDS[n]
+        try:
+            from num2words import num2words
+            return num2words(n).replace("-", " ")
+        except (ImportError, Exception):
+            pass
         return str(n)
     except Exception:
         return str(val)

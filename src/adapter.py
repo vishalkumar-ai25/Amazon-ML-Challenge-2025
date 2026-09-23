@@ -160,6 +160,138 @@ if HAS_TORCH:
             return self.fusion_head(fused).squeeze(-1)
 
 
+    class ModalTowerAdapter(nn.Module):
+        """Modality-Specific Tower Adapter for Multimodal Price Prediction.
+
+        Architecture:
+            - Primary Text / Qwen Tower: 3-layer MLP (in_dim -> 768 -> 768 -> 768) with ReLU, BatchNorm1d, Dropout(0.1)
+            - DINO Vision Tower: 3-layer MLP (in_dim -> 768 -> 768 -> 768) with ReLU, BatchNorm1d, Dropout(0.1)
+            - SigLIP Text Tower: 3-layer MLP (in_dim -> 768 -> 768 -> 768) with ReLU, BatchNorm1d, Dropout(0.1)
+            - SigLIP Vision Tower: 3-layer MLP (in_dim -> 768 -> 768 -> 768) with ReLU, BatchNorm1d, Dropout(0.1)
+            - Optional Tabular Tower: 3-layer MLP (in_dim -> 768 -> 768 -> 768) with ReLU, BatchNorm1d, Dropout(0.1)
+            - Deep Fusion Regressor: Linear(cat_dim, 2048) -> Linear(2048, 1024) -> Linear(1024, 512) -> Linear(512, 1)
+        """
+
+        def __init__(
+            self,
+            qwen_dim: int,
+            dino_dim: Optional[int] = None,
+            siglip_txt_dim: Optional[int] = None,
+            siglip_img_dim: Optional[int] = None,
+            tabular_dim: Optional[int] = None,
+            tower_dim: int = 768,
+            dropout: float = 0.1,
+            target_type: str = "log1p",
+        ):
+            super().__init__()
+            self.tower_dim = tower_dim
+            self.target_type = target_type
+
+            # Modality presence flags
+            self.has_dino = dino_dim is not None and dino_dim > 0
+            self.has_siglip_txt = siglip_txt_dim is not None and siglip_txt_dim > 0
+            self.has_siglip_img = siglip_img_dim is not None and siglip_img_dim > 0
+            self.has_tabular = tabular_dim is not None and tabular_dim > 0
+
+            # 1. Qwen / Primary Text Tower
+            self.qwen_tower = self._build_tower(qwen_dim, tower_dim, dropout)
+            active_count = 1
+
+            # 2. DINO Vision Tower
+            if self.has_dino:
+                self.dino_tower = self._build_tower(dino_dim, tower_dim, dropout)
+                active_count += 1
+
+            # 3. SigLIP Text Tower
+            if self.has_siglip_txt:
+                self.siglip_txt_tower = self._build_tower(siglip_txt_dim, tower_dim, dropout)
+                active_count += 1
+
+            # 4. SigLIP Vision Tower
+            if self.has_siglip_img:
+                self.siglip_img_tower = self._build_tower(siglip_img_dim, tower_dim, dropout)
+                active_count += 1
+
+            # 5. Tabular Tower
+            if self.has_tabular:
+                self.tabular_tower = self._build_tower(tabular_dim, tower_dim, dropout)
+                active_count += 1
+
+            # Deep Fusion Regressor Network
+            cat_dim = tower_dim * active_count
+            fusion_layers = []
+            prev_d = cat_dim
+            for h_d in [2048, 1024, 512]:
+                if prev_d > h_d or prev_d == cat_dim:
+                    fusion_layers.extend([
+                        nn.Linear(prev_d, h_d),
+                        nn.ReLU(),
+                        nn.BatchNorm1d(h_d),
+                        nn.Dropout(0.2 if h_d > 512 else 0.1),
+                    ])
+                    prev_d = h_d
+            fusion_layers.append(nn.Linear(prev_d, 1))
+            self.fusion_net = nn.Sequential(*fusion_layers)
+
+        @staticmethod
+        def _build_tower(in_dim: int, out_dim: int, dropout: float) -> nn.Sequential:
+            return nn.Sequential(
+                nn.Linear(in_dim, out_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(out_dim),
+                nn.Dropout(dropout),
+                nn.Linear(out_dim, out_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(out_dim),
+                nn.Dropout(dropout),
+                nn.Linear(out_dim, out_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(out_dim),
+                nn.Dropout(dropout),
+            )
+
+        def forward(
+            self,
+            qwen_emb: torch.Tensor,
+            dino_emb: Optional[torch.Tensor] = None,
+            siglip_txt_emb: Optional[torch.Tensor] = None,
+            siglip_img_emb: Optional[torch.Tensor] = None,
+            tabular_feat: Optional[torch.Tensor] = None,
+        ) -> torch.Tensor:
+            qwen_repr = self.qwen_tower(qwen_emb)
+            reprs = [qwen_repr]
+
+            if self.has_dino and dino_emb is not None:
+                dino_mask = (torch.norm(dino_emb, p=2, dim=-1, keepdim=True) > 1e-4).float()
+                reprs.append(self.dino_tower(dino_emb) * dino_mask)
+
+            if self.has_siglip_txt and siglip_txt_emb is not None:
+                reprs.append(self.siglip_txt_tower(siglip_txt_emb))
+
+            if self.has_siglip_img and siglip_img_emb is not None:
+                img_mask = (torch.norm(siglip_img_emb, p=2, dim=-1, keepdim=True) > 1e-4).float()
+                reprs.append(self.siglip_img_tower(siglip_img_emb) * img_mask)
+
+            if self.has_tabular and tabular_feat is not None:
+                reprs.append(self.tabular_tower(tabular_feat))
+
+            fused = torch.cat(reprs, dim=-1)
+            return self.fusion_net(fused).squeeze(-1)
+
+        def predict_price(self, pred_raw: torch.Tensor) -> torch.Tensor:
+            """Convert raw model output to positive price values."""
+            if self.target_type == "log1p":
+                clamped = torch.clamp(pred_raw, min=0.0, max=9.0)
+                return torch.clamp(torch.expm1(clamped), min=0.01)
+            else:
+                clamped = torch.clamp(pred_raw, min=-2.5, max=9.0)
+                return torch.exp(clamped)
+else:
+    DifferentiableSMAPELoss = None  # type: ignore
+    MultimodalPricingAdapter = None  # type: ignore
+    ModalTowerAdapter = None  # type: ignore
+
+
 def train_adapter_cv(
     train_text_emb: np.ndarray,
     y_train: np.ndarray,
@@ -351,6 +483,250 @@ def train_adapter_cv(
             print(f"  [Adapter] Fold {fold+1}/{len(cv_splits)} SMAPE: {best_val_smape:.2f}% ({time.time() - t0:.1f}s)")
 
         # Predict test safely in mini-batches
+        fold_test_pred = _predict_test_batched(model, eval_batch_size=1024)
+        test_preds += fold_test_pred / len(cv_splits)
+
+    return oof_preds, test_preds, fold_scores
+
+
+def train_modal_tower_cv(
+    train_qwen_emb: np.ndarray,
+    y_train: np.ndarray,
+    test_qwen_emb: np.ndarray,
+    *,
+    train_dino_emb: Optional[np.ndarray] = None,
+    test_dino_emb: Optional[np.ndarray] = None,
+    train_siglip_txt_emb: Optional[np.ndarray] = None,
+    test_siglip_txt_emb: Optional[np.ndarray] = None,
+    train_siglip_img_emb: Optional[np.ndarray] = None,
+    test_siglip_img_emb: Optional[np.ndarray] = None,
+    train_tabular: Optional[np.ndarray] = None,
+    test_tabular: Optional[np.ndarray] = None,
+    cv_splits: Optional[list[tuple[np.ndarray, np.ndarray]]] = None,
+    n_folds: int = 5,
+    epochs: int = 35,
+    batch_size: int = 256,
+    lr: float = 3e-4,
+    weight_decay: float = 1e-4,
+    tower_dim: int = 768,
+    target_type: str = "log1p",
+    loss_type: str = "mse",
+    device: Optional[str] = None,
+    verbose: bool = True,
+) -> tuple[np.ndarray, np.ndarray, list[float]]:
+    """Train ModalTowerAdapter across K-fold CV.
+
+    Args:
+        train_qwen_emb: (N, D_qwen) primary text embeddings.
+        y_train: (N,) ground-truth price array.
+        test_qwen_emb: (M, D_qwen) test text embeddings.
+        train_dino_emb: Optional (N, D_dino) DINO vision embeddings.
+        test_dino_emb: Optional (M, D_dino) test DINO vision embeddings.
+        train_siglip_txt_emb: Optional (N, D_stxt) SigLIP text embeddings.
+        test_siglip_txt_emb: Optional (M, D_stxt) test SigLIP text embeddings.
+        train_siglip_img_emb: Optional (N, D_simg) SigLIP image embeddings.
+        test_siglip_img_emb: Optional (M, D_simg) test SigLIP image embeddings.
+        train_tabular: Optional (N, D_tab) tabular features.
+        test_tabular: Optional (M, D_tab) test tabular features.
+        cv_splits: Precomputed list of (train_idx, val_idx) tuples.
+        n_folds: Number of folds (used if cv_splits is None).
+        epochs: Maximum training epochs per fold.
+        batch_size: Mini-batch size.
+        lr: Peak learning rate.
+        weight_decay: AdamW weight decay penalty.
+        tower_dim: Hidden dimension for each modality tower (default 768).
+        target_type: 'log1p' (predict ln(y+1)) or 'log' (predict ln(y)).
+        loss_type: 'mse', 'smape', 'mae', or 'huber'.
+        device: 'cuda', 'mps', or 'cpu'. Auto-detects if None.
+        verbose: Whether to log fold progress.
+
+    Returns:
+        Tuple of (oof_predictions, test_predictions, fold_smape_scores).
+    """
+    if not HAS_TORCH:
+        raise ImportError("PyTorch is required to train ModalTowerAdapter.")
+
+    import copy
+    from src.metrics import smape
+    from src.ensemble import create_price_stratified_folds
+
+    if device is None:
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+
+    if cv_splits is None:
+        cv_splits = create_price_stratified_folds(y_train, n_folds=n_folds)
+
+    n_samples = len(y_train)
+    n_test = len(test_qwen_emb)
+
+    oof_preds = np.zeros(n_samples, dtype=np.float64)
+    test_preds = np.zeros(n_test, dtype=np.float64)
+    fold_scores: list[float] = []
+
+    has_dino = train_dino_emb is not None
+    has_siglip_txt = train_siglip_txt_emb is not None
+    has_siglip_img = train_siglip_img_emb is not None
+    has_tabular = train_tabular is not None
+
+    qwen_dim = train_qwen_emb.shape[1]
+    dino_dim = train_dino_emb.shape[1] if has_dino else None
+    siglip_txt_dim = train_siglip_txt_emb.shape[1] if has_siglip_txt else None
+    siglip_img_dim = train_siglip_img_emb.shape[1] if has_siglip_img else None
+    tabular_dim = train_tabular.shape[1] if has_tabular else None
+
+    # Compute training targets based on target_type
+    if target_type == "log1p":
+        y_targets = np.log1p(np.maximum(y_train, 0.0))
+    else:
+        y_targets = np.log(np.maximum(y_train, 0.01))
+
+    if loss_type == "mse":
+        criterion = nn.MSELoss()
+    elif loss_type in ("mae", "l1"):
+        criterion = nn.L1Loss()
+    elif loss_type == "huber":
+        criterion = nn.SmoothL1Loss(beta=0.5)
+    elif loss_type == "smape":
+        criterion = DifferentiableSMAPELoss(predict_in_log=(target_type != "log1p"))
+    else:
+        criterion = nn.MSELoss()
+
+    def _predict_test_batched(model: nn.Module, eval_batch_size: int = 1024) -> np.ndarray:
+        model.eval()
+        preds_list = []
+        with torch.no_grad():
+            for s_idx in range(0, n_test, eval_batch_size):
+                e_idx = min(s_idx + eval_batch_size, n_test)
+                b_q = torch.from_numpy(test_qwen_emb[s_idx:e_idx].astype(np.float32)).to(device)
+                b_d = torch.from_numpy(test_dino_emb[s_idx:e_idx].astype(np.float32)).to(device) if has_dino else None
+                b_st = torch.from_numpy(test_siglip_txt_emb[s_idx:e_idx].astype(np.float32)).to(device) if has_siglip_txt else None
+                b_si = torch.from_numpy(test_siglip_img_emb[s_idx:e_idx].astype(np.float32)).to(device) if has_siglip_img else None
+                b_tab = torch.from_numpy(test_tabular[s_idx:e_idx].astype(np.float32)).to(device) if has_tabular else None
+
+                pred_raw = model(b_q, b_d, b_st, b_si, b_tab)
+                pred_p = model.predict_price(pred_raw).cpu().numpy()
+                preds_list.append(pred_p)
+        return np.concatenate(preds_list)
+
+    for fold, (tr_idx, va_idx) in enumerate(cv_splits):
+        t0 = time.time()
+
+        # Build tensors for training fold
+        tensors_tr = [torch.from_numpy(train_qwen_emb[tr_idx].astype(np.float32))]
+        if has_dino:
+            tensors_tr.append(torch.from_numpy(train_dino_emb[tr_idx].astype(np.float32)))
+        if has_siglip_txt:
+            tensors_tr.append(torch.from_numpy(train_siglip_txt_emb[tr_idx].astype(np.float32)))
+        if has_siglip_img:
+            tensors_tr.append(torch.from_numpy(train_siglip_img_emb[tr_idx].astype(np.float32)))
+        if has_tabular:
+            tensors_tr.append(torch.from_numpy(train_tabular[tr_idx].astype(np.float32)))
+
+        tensors_tr.append(torch.from_numpy(y_targets[tr_idx].astype(np.float32)))
+        if loss_type == "smape":
+            tensors_tr.append(torch.from_numpy(y_train[tr_idx].astype(np.float32)))
+
+        train_dataset = TensorDataset(*tensors_tr)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=(len(train_dataset) > batch_size),
+        )
+
+        # Validation tensors
+        va_q = torch.from_numpy(train_qwen_emb[va_idx].astype(np.float32)).to(device)
+        va_d = torch.from_numpy(train_dino_emb[va_idx].astype(np.float32)).to(device) if has_dino else None
+        va_st = torch.from_numpy(train_siglip_txt_emb[va_idx].astype(np.float32)).to(device) if has_siglip_txt else None
+        va_si = torch.from_numpy(train_siglip_img_emb[va_idx].astype(np.float32)).to(device) if has_siglip_img else None
+        va_tab = torch.from_numpy(train_tabular[va_idx].astype(np.float32)).to(device) if has_tabular else None
+        va_y_true = y_train[va_idx]
+
+        model = ModalTowerAdapter(
+            qwen_dim=qwen_dim,
+            dino_dim=dino_dim,
+            siglip_txt_dim=siglip_txt_dim,
+            siglip_img_dim=siglip_img_dim,
+            tabular_dim=tabular_dim,
+            tower_dim=tower_dim,
+            dropout=0.1,
+            target_type=target_type,
+        ).to(device)
+
+        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
+
+        best_val_smape = float("inf")
+        best_val_preds: Optional[np.ndarray] = None
+        best_state_dict = None
+        patience = 10
+        patience_counter = 0
+
+        for epoch in range(epochs):
+            model.train()
+            for batch in train_loader:
+                optimizer.zero_grad()
+                b_q = batch[0].to(device)
+                c_idx = 1
+                b_d = batch[c_idx].to(device) if has_dino else None
+                if has_dino:
+                    c_idx += 1
+                b_st = batch[c_idx].to(device) if has_siglip_txt else None
+                if has_siglip_txt:
+                    c_idx += 1
+                b_si = batch[c_idx].to(device) if has_siglip_img else None
+                if has_siglip_img:
+                    c_idx += 1
+                b_tab = batch[c_idx].to(device) if has_tabular else None
+                if has_tabular:
+                    c_idx += 1
+                b_target = batch[c_idx].to(device)
+
+                pred_raw = model(b_q, b_d, b_st, b_si, b_tab)
+
+                if loss_type == "smape":
+                    b_price_orig = batch[c_idx + 1].to(device)
+                    loss = criterion(pred_raw, b_price_orig)
+                else:
+                    loss = criterion(pred_raw.squeeze(-1), b_target.squeeze(-1))
+
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+
+            scheduler.step()
+
+            # Validation evaluation
+            model.eval()
+            with torch.no_grad():
+                val_pred_raw = model(va_q, va_d, va_st, va_si, va_tab)
+                val_pred_price = model.predict_price(val_pred_raw).cpu().numpy()
+                val_smape_score = smape(va_y_true, val_pred_price)
+
+                if val_smape_score < best_val_smape:
+                    best_val_smape = val_smape_score
+                    best_val_preds = val_pred_price
+                    best_state_dict = copy.deepcopy(model.state_dict())
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+                    if patience_counter >= patience:
+                        break
+
+        oof_preds[va_idx] = best_val_preds
+        fold_scores.append(best_val_smape)
+
+        if verbose:
+            print(f"  [ModalTower] Fold {fold+1}/{len(cv_splits)} SMAPE: {best_val_smape:.2f}% ({time.time() - t0:.1f}s)", flush=True)
+
+        if best_state_dict is not None:
+            model.load_state_dict(best_state_dict)
+
         fold_test_pred = _predict_test_batched(model, eval_batch_size=1024)
         test_preds += fold_test_pred / len(cv_splits)
 

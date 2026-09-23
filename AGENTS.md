@@ -74,10 +74,16 @@
   - **Final Calibrated Ensemble OOF SMAPE (Continuous Power-Law Calibration):** **41.34% SMAPE**!
   - Nested 5-Fold Cross-Validation: **41.34%** ($a=1.0424, b=-0.1304, \text{floor}=0.3923$, with near-zero variance: $\text{std}_a=0.0006, \text{std}_b=0.0021$).
   - Test Submission: Verified exactly 75,000 positive float prices generated and validated on the remote RTX A4000 GPU server at `dataset/test_out.csv`.
-- **Official Competition Leaderboard Benchmarks (Target: < 40% SMAPE):**
-  - **1st Place:** Team **Test Data** (IIT Patna) — **39.1969% SMAPE**
-  - **2nd Place:** Team **Antrix** (TIET Patiala) — **39.2802% SMAPE**
-  - **3rd Place:** Team **SPAM_LLMs** (IIT ISM Dhanbad) — **40.0401% SMAPE**
+- **Milestone 8 (Multimodal Tower Adapter + Qwen Embeddings + GBDT Stack): IN PROGRESS**
+  - Architecture: Dedicated 4-Tower Modality Network (`ModalTowerAdapter`): Qwen Text Tower (1536-d $\to$ 768-d), DINOv2 Vision Tower (768-d $\to$ 768-d), SigLIP Text Tower (768-d $\to$ 768-d), SigLIP Vision Tower (768-d $\to$ 768-d) + Tabular Tower + Deep Fusion Regressor (Linear 3072 $\to$ 2048 $\to$ 1024 $\to$ 512 $\to$ 1).
+  - Loss: Log-MSE Loss $\mathcal{L} = \text{MSE}(\hat{y}, \log(y + 1))$ with AdamW, Cosine LR Annealing, and validation SMAPE checkpoint recovery.
+  - Multi-Model Convex Blending: Blending the ModalTowerAdapter with our personal-best LightGBM (42.88%) and CatBoost GPU (42.98%).
+  - Post-Processing: Continuous Log-Affine Power-Law Decile Calibration ($a \cdot x^b$).
+  - Target: Break the **39.19% SMAPE benchmark barrier**.
+- **Competition Benchmarks (Target: < 39.0% SMAPE):**
+  - **Top Benchmark:** **39.1969% SMAPE**
+  - **Runner-up Benchmark:** **39.2802% SMAPE**
+  - **Third Benchmark:** **40.0401% SMAPE**
 
 ## 5. Repository Architecture & Directory Structure
 ```
@@ -87,6 +93,8 @@ Amazon-Ml-Prep/
 ├── README.md                  # Problem description and challenge guidelines
 ├── sample_code.py             # Verified starter submission generator script
 ├── train_gpu.log              # Verified log of full 5-fold GPU training run (49.13% SMAPE)
+├── run_gpu_milestone5.sh      # Turnkey runner script for remote GPU machine (Milestone 5)
+├── run_gpu_milestone8.sh      # Turnkey runner script for remote GPU machine (Milestone 8 Multimodal Tower synthesis)
 ├── run_gpu_foundation.sh      # Turnkey runner script for remote GPU machine (Milestone 3 multimodal)
 ├── .gitignore                 # Ignore environments, caches, weights
 ├── configs/

@@ -43,7 +43,7 @@ from src.ensemble import (
     apply_blend,
     create_price_stratified_folds,
 )
-from src.adapter import train_adapter_cv, HAS_TORCH
+from src.adapter import train_adapter_cv, train_modal_tower_cv, HAS_TORCH
 from src.postprocess import (
     optimize_global_multiplier,
     optimize_clip_floor,
@@ -70,6 +70,12 @@ def main():
     parser.add_argument("--batch_size", type=int, default=256, help="Adapter mini-batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Adapter learning rate")
     parser.add_argument("--train_mae_adapter", action="store_true", default=True, help="Train a second neural adapter with MAE loss for ensemble diversity")
+    parser.add_argument("--use_modal_tower", action="store_true", default=True, help="Train Modality-Specific Tower Adapter")
+    parser.add_argument("--skip_modal_tower", action="store_true", default=False, help="Skip Modal Tower Adapter and only train GBDT/standard adapters")
+    parser.add_argument("--modal_tower_epochs", type=int, default=30, help="Epochs for Modal Tower per fold")
+    parser.add_argument("--modal_tower_lr", type=float, default=3e-4, help="Learning rate for Modal Tower")
+    parser.add_argument("--modal_tower_loss", default="mse", choices=["mse", "smape", "mae", "huber"], help="Loss function for Modal Tower")
+    parser.add_argument("--modal_tower_target", default="log1p", choices=["log1p", "log"], help="Target representation for Modal Tower")
     parser.add_argument("--iqr_trim_multiplier", type=float, default=3.5, help="IQR multiplier for outlier trimming on training folds (0 to disable)")
     parser.add_argument("--use_cached_adapters", action="store_true", default=False, help="Load cached neural adapter predictions if available")
     parser.add_argument("--subset", type=int, default=None, help="Train and evaluate on a subset of N samples for fast benchmarking (e.g. 10000)")
@@ -302,7 +308,7 @@ def main():
                 train_vision_emb = train_vision_emb[:args.subset]
             if args.subset < len(test_vision_emb):
                 test_vision_emb = test_vision_emb[:args.subset]
-        print(f"Dual vision embeddings fused: SigLIP ({tr_siglip.shape[1]}-dim) + DINOv2 ({tr_dinov2.shape[1]}-dim) -> {train_vision_emb.shape[1]}-dim", flush=True)
+        print(f"Dual vision embeddings fused: SigLIP ({tr_siglip.shape[1]}-dim) + DINOv2 ({tr_dinov2.shape[1]}-dim) -> {train_vision_emb.shape[1]}-dim (train={len(train_vision_emb)}, test={len(test_vision_emb)})", flush=True)
 
         print("Extracting 48-dim TruncatedSVD vision features from dual embeddings for GBDT models...", flush=True)
         train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=48)
@@ -327,7 +333,7 @@ def main():
                         train_vision_emb = train_vision_emb[:args.subset]
                     if args.subset < len(test_vision_emb):
                         test_vision_emb = test_vision_emb[:args.subset]
-                print(f"Vision embeddings shape: {train_vision_emb.shape}", flush=True)
+                print(f"Vision embeddings shape: train={train_vision_emb.shape}, test={test_vision_emb.shape}", flush=True)
 
                 print("Extracting 32-dim TruncatedSVD vision features for GBDT models...", flush=True)
                 train_v_svd, test_v_svd = build_vision_svd_features(train_vision_emb, test_vision_emb, n_components=32)
@@ -353,7 +359,6 @@ def main():
     print(f"CatBoost GPU Feature Matrix Shape:    {X_train_cat.shape}", flush=True)
 
     # 4. Train Multimodal Neural Pricing Adapter
-    # 4. Train or Load Multimodal Neural Pricing Adapter
     adapter_cache_dir = os.path.join(base_dir, "data", "predictions")
     os.makedirs(adapter_cache_dir, exist_ok=True)
     v_tag_name = args.vision_tag or ("dual" if (siglip_tr and dinov2_tr) else "none")
@@ -362,18 +367,39 @@ def main():
     loaded_adapters = False
     oof_adapter, test_adapter = None, None
     oof_adapter_mae, test_adapter_mae = None, None
+    oof_modal_tower, test_modal_tower = None, None
+
+    # Check for SigLIP text embeddings
+    siglip_txt_candidates = ["siglip", "siglip_base_patch16_224", "siglip_base"]
+    train_siglip_txt = None
+    test_siglip_txt = None
+    for cand in siglip_txt_candidates:
+        tr_stxt_p = os.path.join(emb_dir, f"train_text_{cand}.npy")
+        te_stxt_p = os.path.join(emb_dir, f"test_text_{cand}.npy")
+        if os.path.exists(tr_stxt_p) and os.path.exists(te_stxt_p):
+            print(f"Loading SigLIP text embeddings: {tr_stxt_p}...", flush=True)
+            train_siglip_txt = np.load(tr_stxt_p)
+            test_siglip_txt = np.load(te_stxt_p)
+            if args.subset is not None:
+                train_siglip_txt = train_siglip_txt[:args.subset]
+                test_siglip_txt = test_siglip_txt[:args.subset]
+            break
 
     if args.use_cached_adapters and os.path.exists(adapter_cache_file):
         print(f"\n[4/5] Loading precomputed Neural Adapter predictions from cache: {adapter_cache_file}...", flush=True)
         try:
             acache = np.load(adapter_cache_file)
-            oof_adapter = acache["oof_adapter"]
-            test_adapter = acache["test_adapter"]
-            if args.train_mae_adapter and "oof_adapter_mae" in acache:
+            if "oof_modal_tower" in acache:
+                oof_modal_tower = acache["oof_modal_tower"]
+                test_modal_tower = acache["test_modal_tower"]
+                print(f"Loaded OOF Modal Tower Adapter SMAPE: {smape(y_train, oof_modal_tower):.2f}%", flush=True)
+            if "oof_adapter" in acache:
+                oof_adapter = acache["oof_adapter"]
+                test_adapter = acache["test_adapter"]
+                print(f"Loaded OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
+            if "oof_adapter_mae" in acache:
                 oof_adapter_mae = acache["oof_adapter_mae"]
                 test_adapter_mae = acache["test_adapter_mae"]
-            print(f"Loaded OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
-            if oof_adapter_mae is not None:
                 print(f"Loaded OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
             loaded_adapters = True
         except Exception as e:
@@ -381,22 +407,53 @@ def main():
 
     if not loaded_adapters:
         if HAS_TORCH:
-            print("\n[4/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
-            oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
-                train_text_emb=train_text_emb,
-                y_train=y_train,
-                test_text_emb=test_text_emb,
-                train_vision_emb=train_vision_emb,
-                test_vision_emb=test_vision_emb,
-                train_tabular=X_num_train.toarray(),
-                test_tabular=X_num_test.toarray(),
-                cv_splits=cv_splits,
-                epochs=args.epochs,
-                batch_size=args.batch_size,
-                lr=args.lr,
-                loss_type="smape",
-            )
-            print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
+            # 4a. Train Modality-Specific Tower Adapter (Modality-specific 3-layer towers + deep fusion regressor)
+            if args.use_modal_tower and not args.skip_modal_tower:
+                print("\n[4a/5] Training Modality-Specific Tower Adapter...", flush=True)
+                dino_tr_in = tr_dinov2[:args.subset] if (siglip_tr and dinov2_tr and want_dual and args.subset) else (tr_dinov2 if (siglip_tr and dinov2_tr and want_dual) else None)
+                dino_te_in = te_dinov2[:args.subset] if (siglip_tr and dinov2_tr and want_dual and args.subset) else (te_dinov2 if (siglip_tr and dinov2_tr and want_dual) else None)
+                siglip_tr_in = tr_siglip[:args.subset] if (siglip_tr and dinov2_tr and want_dual and args.subset) else (tr_siglip if (siglip_tr and dinov2_tr and want_dual) else train_vision_emb)
+                siglip_te_in = te_siglip[:args.subset] if (siglip_tr and dinov2_tr and want_dual and args.subset) else (te_siglip if (siglip_tr and dinov2_tr and want_dual) else test_vision_emb)
+
+                oof_modal_tower, test_modal_tower, mt_scores = train_modal_tower_cv(
+                    train_qwen_emb=train_text_emb,
+                    y_train=y_train,
+                    test_qwen_emb=test_text_emb,
+                    train_dino_emb=dino_tr_in,
+                    test_dino_emb=dino_te_in,
+                    train_siglip_txt_emb=train_siglip_txt,
+                    test_siglip_txt_emb=test_siglip_txt,
+                    train_siglip_img_emb=siglip_tr_in,
+                    test_siglip_img_emb=siglip_te_in,
+                    train_tabular=X_num_train.toarray(),
+                    test_tabular=X_num_test.toarray(),
+                    cv_splits=cv_splits,
+                    epochs=args.modal_tower_epochs,
+                    batch_size=args.batch_size,
+                    lr=args.modal_tower_lr,
+                    loss_type=args.modal_tower_loss,
+                    target_type=args.modal_tower_target,
+                )
+                print(f"\nOverall OOF Modal Tower Adapter SMAPE: {smape(y_train, oof_modal_tower):.2f}%", flush=True)
+
+            # 4b. Standard Neural Pricing Adapter (SMAPE Loss)
+            if not args.use_modal_tower or args.skip_modal_tower:
+                print("\n[4b/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
+                oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
+                    train_text_emb=train_text_emb,
+                    y_train=y_train,
+                    test_text_emb=test_text_emb,
+                    train_vision_emb=train_vision_emb,
+                    test_vision_emb=test_vision_emb,
+                    train_tabular=X_num_train.toarray(),
+                    test_tabular=X_num_test.toarray(),
+                    cv_splits=cv_splits,
+                    epochs=args.epochs,
+                    batch_size=args.batch_size,
+                    lr=args.lr,
+                    loss_type="smape",
+                )
+                print(f"\nOverall OOF Neural Adapter (SMAPE loss) SMAPE: {smape(y_train, oof_adapter):.2f}%", flush=True)
 
             if args.train_mae_adapter:
                 print("\nTraining Second Neural Adapter with MAE Loss for Ensemble Diversity...", flush=True)
@@ -416,15 +473,19 @@ def main():
                 )
                 print(f"Overall OOF Neural Adapter (MAE loss) SMAPE: {smape(y_train, oof_adapter_mae):.2f}%", flush=True)
 
-            save_dict = {
-                "oof_adapter": oof_adapter,
-                "test_adapter": test_adapter,
-            }
+            save_dict = {}
+            if oof_modal_tower is not None:
+                save_dict["oof_modal_tower"] = oof_modal_tower
+                save_dict["test_modal_tower"] = test_modal_tower
+            if oof_adapter is not None:
+                save_dict["oof_adapter"] = oof_adapter
+                save_dict["test_adapter"] = test_adapter
             if oof_adapter_mae is not None:
                 save_dict["oof_adapter_mae"] = oof_adapter_mae
                 save_dict["test_adapter_mae"] = test_adapter_mae
-            np.savez_compressed(adapter_cache_file, **save_dict)
-            print(f"Saved Neural Adapter predictions to cache: {adapter_cache_file}", flush=True)
+            if save_dict:
+                np.savez_compressed(adapter_cache_file, **save_dict)
+                print(f"Saved Neural Adapter predictions to cache: {adapter_cache_file}", flush=True)
         else:
             print("\n[4/5] PyTorch not available in current environment, skipping Neural Pricing Adapter...", flush=True)
 
@@ -511,6 +572,8 @@ def main():
     print("\n" + "=" * 75, flush=True)
     print(f"Overall OOF LightGBM SMAPE:            {smape(y_train, oof_lgbm):.2f}%", flush=True)
     print(f"Overall OOF CatBoost SMAPE:            {smape(y_train, oof_cat):.2f}%", flush=True)
+    if oof_modal_tower is not None:
+        print(f"Overall OOF Modal Tower Adapter:       {smape(y_train, oof_modal_tower):.2f}%", flush=True)
     if oof_adapter is not None:
         print(f"Overall OOF Neural Adapter (SMAPE):    {smape(y_train, oof_adapter):.2f}%", flush=True)
     if oof_adapter_mae is not None:
@@ -528,6 +591,9 @@ def main():
         "lgbm": test_lgbm,
         "cat": test_cat,
     }
+    if oof_modal_tower is not None:
+        save_oof_dict["modal_tower"] = oof_modal_tower
+        save_test_dict["modal_tower"] = test_modal_tower
     if oof_adapter is not None:
         save_oof_dict["adapter_smape"] = oof_adapter
         save_test_dict["adapter_smape"] = test_adapter
@@ -549,6 +615,9 @@ def main():
         "lgbm": test_lgbm,
         "cat": test_cat,
     }
+    if oof_modal_tower is not None:
+        oof_dict["modal_tower"] = oof_modal_tower
+        test_dict["modal_tower"] = test_modal_tower
     if oof_adapter is not None:
         oof_dict["adapter_smape"] = oof_adapter
         test_dict["adapter_smape"] = test_adapter
