@@ -31,6 +31,23 @@ def get_optimal_device() -> str:
     return "cpu"
 
 
+def ensure_tokenizer_dependencies() -> None:
+    """Ensure sentencepiece and protobuf are available for multimodal tokenizers."""
+    for import_name, pip_name in [("sentencepiece", "sentencepiece"), ("google.protobuf", "protobuf")]:
+        try:
+            __import__(import_name)
+        except ImportError:
+            import subprocess
+            print(f"Installing missing dependency: {pip_name} for tokenizer...", flush=True)
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", pip_name, "--no-warn-script-location"],
+                    check=True,
+                )
+            except Exception as e:
+                print(f"Warning: automatic pip install of {pip_name} failed: {e}", flush=True)
+
+
 def extract_text_embeddings_hf(
     texts: Sequence[str],
     model_name: str = "BAAI/bge-large-en-v1.5",
@@ -138,17 +155,13 @@ def extract_siglip_text_embeddings(
     if device is None:
         device = get_optimal_device()
 
+    ensure_tokenizer_dependencies()
     print(f"Loading SigLIP text encoder: {model_name} on device: {device}...")
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-    except ImportError as e:
-        if "sentencepiece" in str(e).lower():
-            import subprocess
-            print("Installing missing sentencepiece for SigLIP tokenizer...", flush=True)
-            subprocess.run([sys.executable, "-m", "pip", "install", "sentencepiece", "--no-warn-script-location"], check=True)
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-        else:
-            raise e
+    except Exception as e:
+        ensure_tokenizer_dependencies()
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
     dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else (torch.float16 if device == "cuda" else torch.float32)
     model = AutoModel.from_pretrained(model_name, torch_dtype=dtype).to(device)
     model.eval()

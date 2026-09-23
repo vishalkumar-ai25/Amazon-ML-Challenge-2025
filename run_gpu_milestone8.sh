@@ -29,26 +29,36 @@ echo "==========================================================================
 echo "  Amazon ML Challenge 2025: Milestone 8 (Multimodal Tower + GBDT Stack)"
 echo "==========================================================================="
 
-# 2. Check for optional dependencies
-echo "=== Checking Environment Dependencies ==="
+# 2. Check and ensure all dependencies
+echo "=== Checking and Ensuring Environment Dependencies ==="
 python -c "
-for pkg in ['torch', 'transformers', 'lightgbm', 'catboost', 'faiss', 'scipy', 'sklearn', 'num2words', 'sentencepiece']:
-    try:
-        __import__(pkg)
-        print(f'  [OK] {pkg}')
-    except ImportError:
-        print(f'  [MISSING] {pkg}')
-"
+import sys, subprocess
 
-# Optional auto-install for num2words and sentencepiece if missing
-python -c "import num2words" 2>/dev/null || {
-    echo "Installing num2words for sub-word tokenization..."
-    pip install num2words --no-warn-script-location || true
-}
-python -c "import sentencepiece" 2>/dev/null || {
-    echo "Installing sentencepiece for SigLIP tokenizer..."
-    pip install sentencepiece --no-warn-script-location || true
-}
+deps = [
+    ('torch', 'torch'),
+    ('transformers', 'transformers'),
+    ('lightgbm', 'lightgbm'),
+    ('catboost', 'catboost'),
+    ('scipy', 'scipy'),
+    ('sklearn', 'scikit-learn'),
+    ('num2words', 'num2words'),
+    ('sentencepiece', 'sentencepiece'),
+    ('google.protobuf', 'protobuf'),
+    ('faiss', 'faiss-cpu'),
+]
+
+for import_name, pip_name in deps:
+    try:
+        __import__(import_name)
+        print(f'  [OK] {import_name}')
+    except ImportError:
+        print(f'  [INSTALLING] {pip_name} (needed by {import_name})...')
+        try:
+            subprocess.run([sys.executable, '-m', 'pip', 'install', pip_name, '--no-warn-script-location'], check=True)
+            print(f'  [INSTALLED] {pip_name}')
+        except Exception as e:
+            print(f'  [WARNING] Failed to auto-install {pip_name}: {e}')
+"
 
 # 3. Check / Extract Foundation Embeddings
 SUBSET_ARG=""

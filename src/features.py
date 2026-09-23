@@ -749,7 +749,7 @@ def extract_advanced_catalog_features(df: pd.DataFrame, brand_tiers: Optional[di
 
     # 5. Wholesale & Case Indicators (Addresses 190% SMAPE tail errors)
     wholesale_terms = ["per case", "case of", "pallet", "carton of", "wholesale", "commercial"]
-    has_wholesale_kw = content_lower.apply(lambda text: int(any(w in text for w in wholesale_terms)))
+    has_wholesale_kw = content_lower.apply(lambda text: int(any(w in str(text) for w in wholesale_terms)))
     is_large_pack = (result["pack_qty"] >= 24).astype(int) if "pack_qty" in result.columns else 0
     result["is_wholesale_case"] = (has_wholesale_kw | is_large_pack).astype(int)
     result["is_pallet"] = content_lower.str.contains("pallet", regex=False).astype(int)

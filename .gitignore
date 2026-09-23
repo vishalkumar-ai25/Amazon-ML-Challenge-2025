@@ -21,3 +21,9 @@ dataset/test.csv
 *.onnx
 *.joblib
 *.pkl
+
+# Execution & Caches
+*.log
+catboost_info/
+data/
+scratch/
