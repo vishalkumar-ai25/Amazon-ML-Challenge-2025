@@ -139,7 +139,16 @@ def extract_siglip_text_embeddings(
         device = get_optimal_device()
 
     print(f"Loading SigLIP text encoder: {model_name} on device: {device}...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    except ImportError as e:
+        if "sentencepiece" in str(e).lower():
+            import subprocess
+            print("Installing missing sentencepiece for SigLIP tokenizer...", flush=True)
+            subprocess.run([sys.executable, "-m", "pip", "install", "sentencepiece", "--no-warn-script-location"], check=True)
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+        else:
+            raise e
     dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else (torch.float16 if device == "cuda" else torch.float32)
     model = AutoModel.from_pretrained(model_name, torch_dtype=dtype).to(device)
     model.eval()

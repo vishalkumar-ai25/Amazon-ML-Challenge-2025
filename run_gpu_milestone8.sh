@@ -32,7 +32,7 @@ echo "==========================================================================
 # 2. Check for optional dependencies
 echo "=== Checking Environment Dependencies ==="
 python -c "
-for pkg in ['torch', 'transformers', 'lightgbm', 'catboost', 'faiss', 'scipy', 'sklearn', 'num2words']:
+for pkg in ['torch', 'transformers', 'lightgbm', 'catboost', 'faiss', 'scipy', 'sklearn', 'num2words', 'sentencepiece']:
     try:
         __import__(pkg)
         print(f'  [OK] {pkg}')
@@ -40,10 +40,14 @@ for pkg in ['torch', 'transformers', 'lightgbm', 'catboost', 'faiss', 'scipy', '
         print(f'  [MISSING] {pkg}')
 "
 
-# Optional auto-install for num2words if missing
+# Optional auto-install for num2words and sentencepiece if missing
 python -c "import num2words" 2>/dev/null || {
     echo "Installing num2words for sub-word tokenization..."
     pip install num2words --no-warn-script-location || true
+}
+python -c "import sentencepiece" 2>/dev/null || {
+    echo "Installing sentencepiece for SigLIP tokenizer..."
+    pip install sentencepiece --no-warn-script-location || true
 }
 
 # 3. Check / Extract Foundation Embeddings
