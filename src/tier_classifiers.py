@@ -99,6 +99,10 @@ def train_extreme_tier_classifiers_cv(
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
     for fold, (tr_idx, va_idx) in enumerate(cv_splits):
+        t_fold = time.time()
+        if verbose:
+            print(f"  Training extreme tier fold {fold + 1}/{n_folds}...", end=" ", flush=True)
+
         X_tr, X_va = X_train[tr_idx], X_train[va_idx]
         yb_tr, yb_va = y_budget[tr_idx], y_budget[va_idx]
         yl_tr, yl_va = y_luxury[tr_idx], y_luxury[va_idx]
@@ -153,6 +157,9 @@ def train_extreme_tier_classifiers_cv(
         oof_p_luxury[va_idx] = p_va_l.astype(np.float32)
         test_p_budget += p_te_b.astype(np.float32) / n_folds
         test_p_luxury += p_te_l.astype(np.float32) / n_folds
+
+        if verbose:
+            print(f"done ({time.time() - t_fold:.1f}s)", flush=True)
 
     # Validation metrics
     try:
