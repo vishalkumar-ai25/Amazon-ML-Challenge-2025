@@ -270,22 +270,131 @@ def number_to_words(val: object) -> str:
         return str(val)
 
 
+CATALOG_CATEGORIES = [
+    'Electronics', 'Beauty', 'Health', 'Grocery', 'Home & Kitchen', 'Toys', 'Sports',
+    'Automotive', 'Clothing', 'Books', 'Pet Supplies', 'Baby', 'Office', 'Tools',
+    'Garden', 'Jewelry', 'Musical Instruments', 'Arts & Crafts', 'Industrial'
+]
+
+CATEGORY_KEYWORDS = {
+    'Grocery': ['coffee', 'tea', 'snack', 'chocolate', 'candy', 'sauce', 'spice', 'cereal', 'cookie', 'organic', 'sugar', 'bean', 'rice', 'pasta', 'syrup', 'flour', 'beverage', 'juice', 'meat', 'beef', 'food'],
+    'Health': ['vitamin', 'supplement', 'capsule', 'tablet', 'protein', 'probiotic', 'wellness', 'gummy', 'collagen', 'calcium', 'immune', 'nutrition', 'pain relief'],
+    'Beauty': ['skin', 'face', 'cream', 'serum', 'lotion', 'shampoo', 'conditioner', 'hair', 'lipstick', 'mascara', 'makeup', 'cosmetic', 'perfume', 'fragrance', 'cleanser', 'moisturizer', 'sunscreen', 'nail'],
+    'Electronics': ['usb', 'cable', 'charger', 'battery', 'audio', 'headphone', 'earbud', 'bluetooth', 'speaker', 'adapter', 'hdmi', 'wireless', 'camera', 'laptop', 'phone', 'computer', 'screen', 'led', 'plug'],
+    'Home & Kitchen': ['kitchen', 'cookware', 'pan', 'pot', 'knife', 'pillow', 'blanket', 'towel', 'curtain', 'sheet', 'bedding', 'rug', 'mat', 'cleaning', 'soap', 'detergent', 'sponge', 'storage', 'basket', 'organizer', 'mug', 'cup', 'glass', 'dish', 'plate'],
+    'Pet Supplies': ['dog', 'cat', 'pet', 'puppy', 'kitten', 'leash', 'collar', 'chew', 'treat', 'aquarium', 'bird', 'fish food'],
+    'Clothing': ['shirt', 'pants', 'dress', 'jacket', 'socks', 'underwear', 'shoe', 'shoes', 'boot', 'boots', 'hoodie', 'apparel', 'hat', 'glove', 'belt', 'scarf', 't-shirt'],
+    'Office': ['paper', 'pen', 'pencil', 'notebook', 'binder', 'desk', 'stapler', 'folder', 'label', 'envelope', 'ink', 'toner'],
+    'Tools': ['drill', 'wrench', 'screwdriver', 'pliers', 'saw', 'hammer', 'hardware', 'screw', 'bolt', 'toolkit', 'socket'],
+    'Sports': ['fitness', 'yoga', 'workout', 'gym', 'cycling', 'exercise', 'outdoor', 'camping', 'hiking', 'ball', 'fishing'],
+    'Toys': ['toy', 'puzzle', 'game', 'doll', 'action figure', 'lego', 'plush', 'play'],
+    'Automotive': ['car', 'vehicle', 'motor', 'tire', 'oil filter', 'wiper', 'headlight', 'automotive'],
+    'Baby': ['baby', 'infant', 'toddler', 'diaper', 'stroller', 'pacifier', 'wipes'],
+    'Garden': ['garden', 'plant', 'flower', 'seed', 'lawn', 'mower', 'hose', 'fertilizer', 'soil'],
+    'Jewelry': ['jewelry', 'necklace', 'bracelet', 'ring', 'earring', 'gold', 'silver', 'diamond', 'gemstone'],
+    'Arts & Crafts': ['craft', 'paint', 'canvas', 'brush', 'yarn', 'knitting', 'sewing', 'fabric', 'bead'],
+    'Musical Instruments': ['guitar', 'piano', 'keyboard', 'drum', 'microphone', 'violin', 'strings', 'instrument'],
+    'Industrial': ['industrial', 'safety', 'commercial', 'valve', 'pump', 'gauge', 'filtration'],
+}
+
+_COMPILED_CATEGORY_PATTERNS = {
+    cat: re.compile(r'\b(?:' + '|'.join(re.escape(k) for k in [cat.lower()] + CATEGORY_KEYWORDS.get(cat, [])) + r')s?\b')
+    for cat in CATALOG_CATEGORIES
+}
+
+
+def extract_category(text: object) -> str:
+    """Classify catalog text into one of 18 specific categories or 'Other' with high accuracy."""
+    if not isinstance(text, str) or not text:
+        return 'Other'
+    text_l = text.lower()
+    for cat, pattern in _COMPILED_CATEGORY_PATTERNS.items():
+        if pattern.search(text_l):
+            return cat
+    return 'Other'
+
+
+TIER_LABELS = {
+    0: "Budget",
+    1: "Value",
+    2: "Standard",
+    3: "Premium",
+    4: "Luxury",
+}
+
+
 def build_llm_prompt(row: pd.Series | dict) -> str:
-    """Build a structured text prompt for frozen foundation language models."""
+    """Build an enriched structured text prompt for frozen foundation language models.
+
+    Format:
+    Category: {category} | Brand: {brand} (Tier: {tier}) | Product: {item_name} | Size: {val} {unit} | Multipack: {pack} pack | Specifications: {bullets}
+    """
     item_name = str(row.get("item_name", "")).strip()
     unit = str(row.get("unit_normalized", "")).strip()
     val = row.get("value_num", 1.0)
     pack_qty = row.get("pack_qty", 1.0)
     bullets = str(row.get("description_raw", "")).strip()
 
-    pack_word = number_to_words(pack_qty)
-    val_str = f"{val:.1f}".rstrip("0").rstrip(".")
+    # Category extraction / retrieval
+    category = str(row.get("category", "") or row.get("product_category", "")).strip()
+    if not category or category in ("Other", "other", "nan", "None", "19", 19):
+        catalog_content = str(row.get("catalog_content", "")).strip()
+        if catalog_content:
+            cat_extracted = extract_category(catalog_content)
+            category = cat_extracted if cat_extracted != "Other" else ""
+        else:
+            category = ""
 
-    parts = [f"Product: {item_name}"]
+    # Brand extraction / retrieval
+    brand = str(row.get("brand", "")).strip()
+    if not brand and item_name:
+        brand = extract_brand(item_name)
+    if brand in ("nan", "None"):
+        brand = ""
+
+    # Brand Price Tier
+    tier = row.get("tier", None)
+    if tier is None:
+        tier = row.get("brand_price_tier", None)
+
+    tier_label = ""
+    if tier is not None and not pd.isna(tier):
+        try:
+            t_int = int(tier)
+            tier_label = TIER_LABELS.get(t_int, f"Tier {t_int}")
+        except (ValueError, TypeError):
+            tier_label = str(tier).strip()
+
+    parts = []
+
+    # 1. Category (when known)
+    if category and category not in ("Other", "other", "nan", "None"):
+        parts.append(f"Category: {category}")
+
+    # 2. Brand (with optional Tier)
+    if brand:
+        if tier_label:
+            parts.append(f"Brand: {brand} (Tier: {tier_label})")
+        else:
+            parts.append(f"Brand: {brand}")
+
+    # 3. Product Title (Anchor)
+    if item_name:
+        parts.append(f"Product: {item_name}")
+    elif not parts:
+        parts.append("Product: Unknown")
+
+    # 4. Physical size
     if val > 0:
+        val_str = f"{val:.1f}".rstrip("0").rstrip(".")
         parts.append(f"Size: {val_str} {unit}")
+
+    # 5. Pack quantity
     if pack_qty > 1.0:
+        pack_word = number_to_words(pack_qty)
         parts.append(f"Multipack: {pack_word} pack")
+
+    # 6. Specifications / Bullets
     if bullets:
         parts.append(f"Specifications: {bullets[:300]}")
 
@@ -296,11 +405,12 @@ def build_llm_prompt(row: pd.Series | dict) -> str:
 # Structured feature extraction
 # ---------------------------------------------------------------------------
 
-def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
+def extract_structured_features(df: pd.DataFrame, brand_tiers: Optional[dict] = None) -> pd.DataFrame:
     """Extract structured fields from catalog_content into typed columns.
 
     Args:
         df: DataFrame with 'catalog_content' column.
+        brand_tiers: Optional dict mapping brand names to integer price tiers (0-4).
 
     Returns:
         DataFrame with structured columns and numeric indicators.
@@ -332,6 +442,16 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
     # Brand extraction
     result["brand"] = result["item_name"].apply(extract_brand)
 
+    # Product category extraction
+    result["category"] = result["catalog_content"].apply(extract_category)
+    result["product_category"] = result["category"]
+
+    # Brand price tier (if provided)
+    if brand_tiers is not None:
+        result["brand_price_tier"] = result["brand"].map(brand_tiers).fillna(2).astype(int)
+    else:
+        result["brand_price_tier"] = 2
+
     # Numeric value (from Value field)
     result["value_num"] = pd.to_numeric(result["value_raw"], errors="coerce").fillna(1.0)
     result["value_num"] = np.clip(result["value_num"], 0.01, 10_000.0)
@@ -356,8 +476,6 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
             return val
         if unit == "count":
             return max(val, pack)
-        if val >= pack:
-            return val
         return val * pack
 
     result["total_quantity"] = result.apply(_resolve_total_quantity, axis=1)
@@ -383,6 +501,9 @@ def extract_structured_features(df: pd.DataFrame) -> pd.DataFrame:
     # Unified standard quantity across physical dimensions
     result["std_quantity"] = result["total_grams"] + result["total_ml"] + result["total_pieces"]
     result["log_std_quantity"] = np.log1p(result["std_quantity"])
+
+    # Physical unit density: separates liquids (negative) from solids (positive) and counts (zero)
+    result["log_unit_density"] = result["log_total_grams"] - result["log_total_ml"]
 
     # Structured prompt for foundation models
     result["llm_prompt"] = result.apply(build_llm_prompt, axis=1)
@@ -457,6 +578,7 @@ NUMERIC_COLS = [
     "log_total_ml",
     "log_total_pieces",
     "log_std_quantity",
+    "log_unit_density",
     "name_len",
     "content_len",
     "desc_len",
@@ -686,19 +808,8 @@ def extract_advanced_catalog_features(df: pd.DataFrame, brand_tiers: Optional[di
     result = df.copy()
     
     # 1. Product Category
-    categories = ['Electronics', 'Beauty', 'Grocery', 'Health', 'Home & Kitchen', 'Toys', 'Sports', 'Automotive', 'Clothing', 'Books', 'Pet Supplies', 'Baby', 'Office', 'Tools', 'Garden', 'Jewelry', 'Musical Instruments', 'Arts & Crafts', 'Industrial']
-    
-    def get_category(text):
-        if not isinstance(text, str):
-            return 'Other'
-        text_lower = text.lower()
-        for cat in categories:
-            if cat.lower() in text_lower:
-                return cat
-        return 'Other'
-        
-    result['product_category_str'] = result['catalog_content'].apply(get_category)
-    cat_map = {cat: i for i, cat in enumerate(categories + ['Other'])}
+    result['product_category_str'] = result['catalog_content'].apply(extract_category)
+    cat_map = {cat: i for i, cat in enumerate(CATALOG_CATEGORIES + ['Other'])}
     result['product_category'] = result['product_category_str'].map(cat_map)
     result.drop(columns=['product_category_str'], inplace=True)
     

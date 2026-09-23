@@ -266,9 +266,27 @@ def main():
         test_struct["cat_oof_price"] += test_cat_map / n_folds
         test_struct["brand_oof_price"] += test_brand_map / n_folds
 
-    te_cols = ["cat_oof_price", "brand_oof_price"]
-    num_cols += te_cols
-    print(f"Target encoding completed in {time.time() - t_te:.1f}s ({len(te_cols)} features added)", flush=True)
+    # 3c-2. Physical Price-Per-Unit (PPU) Priors into GBDT (Lever 4)
+    print("Computing Physical Price-Per-Unit (PPU) Priors & Unit Density (Lever 4)...", flush=True)
+    for struct_df in (train_struct, test_struct):
+        safe_qty = np.maximum(struct_df["std_quantity"].fillna(1.0).astype(float), 1.0)
+        safe_log_qty = np.maximum(struct_df["log_std_quantity"].fillna(0.0).astype(float), 0.0)
+
+        # Implied PPU ratios (linear and log space)
+        struct_df["cat_estimated_ppu"] = np.exp(struct_df["cat_oof_price"]) / safe_qty
+        struct_df["brand_estimated_ppu"] = np.exp(struct_df["brand_oof_price"]) / safe_qty
+        struct_df["cat_implied_log_ppu"] = struct_df["cat_oof_price"] - safe_log_qty
+        struct_df["brand_implied_log_ppu"] = struct_df["brand_oof_price"] - safe_log_qty
+
+    ppu_cols = [
+        "cat_estimated_ppu",
+        "brand_estimated_ppu",
+        "cat_implied_log_ppu",
+        "brand_implied_log_ppu",
+    ]
+    te_cols = ["cat_oof_price", "brand_oof_price"] + ppu_cols
+    num_cols += ppu_cols
+    print(f"Target encoding & PPU priors completed in {time.time() - t_te:.1f}s ({len(te_cols)} features added)", flush=True)
 
     X_num_train = build_numeric_matrix(train_struct, columns=num_cols)
     X_num_test = build_numeric_matrix(test_struct, columns=num_cols)

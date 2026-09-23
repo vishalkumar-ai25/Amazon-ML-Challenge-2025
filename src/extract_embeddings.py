@@ -15,7 +15,12 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from src.features import build_llm_prompt, extract_structured_features
+from src.features import (
+    build_llm_prompt,
+    extract_brand,
+    extract_field,
+    extract_structured_features,
+)
 
 
 def get_optimal_device() -> str:
@@ -290,6 +295,37 @@ def clean_model_tag(model_name: str) -> str:
     return model_name.split("/")[-1].lower().replace("-", "_").replace(".", "_")
 
 
+def compute_safe_brand_tiers(train_df: pd.DataFrame, min_count: int = 2) -> dict:
+    """Compute empirical brand price tiers (0-4) with minimum sample protection.
+
+    Brands with fewer than min_count occurrences are excluded from empirical quantile
+    mapping to prevent 1-sample price leakage in cross-validation.
+    """
+    if "price" not in train_df.columns:
+        return {}
+    item_names = train_df["catalog_content"].apply(lambda x: extract_field(x, "Item Name"))
+    brands = item_names.apply(extract_brand)
+    counts = brands.value_counts()
+    multi_brands = set(counts[counts >= min_count].index)
+
+    valid_mask = brands.isin(multi_brands)
+    if not valid_mask.any():
+        return {}
+
+    medians = train_df[valid_mask].groupby(brands[valid_mask])["price"].median()
+    quantiles = medians.quantile([0.2, 0.4, 0.6, 0.8]).to_dict()
+
+    def _get_tier(p: float) -> int:
+        if pd.isna(p): return 2
+        if p <= quantiles.get(0.2, 0): return 0
+        if p <= quantiles.get(0.4, 0): return 1
+        if p <= quantiles.get(0.6, 0): return 2
+        if p <= quantiles.get(0.8, 0): return 3
+        return 4
+
+    return medians.apply(_get_tier).to_dict()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Extract Frozen Foundation Model Embeddings")
     parser.add_argument("--model", default="BAAI/bge-large-en-v1.5", help="Text model repo ID (e.g. Alibaba-NLP/gte-Qwen2-1.5B-instruct or Qwen/Qwen2.5-3B)")
@@ -303,6 +339,7 @@ def main():
     parser.add_argument("--vision_only", action="store_true", help="Skip text extraction and only extract vision embeddings")
     parser.add_argument("--text_only", action="store_true", help="Skip vision extraction and only extract text embeddings")
     parser.add_argument("--subset", type=int, default=None, help="Optional subset of samples for fast benchmark extraction")
+    parser.add_argument("--force", action="store_true", help="Force re-extraction even if valid cache exists")
     args = parser.parse_args()
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -322,6 +359,8 @@ def main():
             test_df = test_df.iloc[:args.subset].reset_index(drop=True)
 
     def is_cache_valid(path: str, expected_rows: int) -> bool:
+        if args.force:
+            return False
         if not os.path.exists(path):
             return False
         try:
@@ -334,9 +373,10 @@ def main():
 
     # 1. Primary Text embeddings (Qwen, BGE, etc.)
     if not args.vision_only:
-        print("Extracting structured prompt fields...")
-        train_struct = extract_structured_features(train_df)
-        test_struct = extract_structured_features(test_df)
+        print("Extracting structured prompt fields with category & brand injection...")
+        safe_brand_tiers = compute_safe_brand_tiers(train_df, min_count=2)
+        train_struct = extract_structured_features(train_df, brand_tiers=safe_brand_tiers)
+        test_struct = extract_structured_features(test_df, brand_tiers=safe_brand_tiers)
 
         tag = clean_model_tag(args.model)
         train_out_text = os.path.join(out_dir, f"train_text_{tag}.npy")
@@ -372,8 +412,10 @@ def main():
 
         if not is_cache_valid(train_out_stxt, expected_len) or not is_cache_valid(test_out_stxt, expected_len):
             print(f"\n[SigLIP Text] Extracting SigLIP text embeddings using {args.siglip_model} ({expected_len} samples)...")
-            train_struct = extract_structured_features(train_df) if "train_struct" not in locals() else train_struct
-            test_struct = extract_structured_features(test_df) if "test_struct" not in locals() else test_struct
+            if "train_struct" not in locals():
+                safe_brand_tiers = compute_safe_brand_tiers(train_df, min_count=2)
+                train_struct = extract_structured_features(train_df, brand_tiers=safe_brand_tiers)
+                test_struct = extract_structured_features(test_df, brand_tiers=safe_brand_tiers)
 
             train_stxt_emb = extract_siglip_text_embeddings(
                 train_struct["llm_prompt"],
