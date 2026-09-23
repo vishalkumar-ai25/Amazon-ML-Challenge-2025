@@ -70,6 +70,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=256, help="Adapter mini-batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Adapter learning rate")
     parser.add_argument("--train_mae_adapter", action="store_true", default=True, help="Train a second neural adapter with MAE loss for ensemble diversity")
+    parser.add_argument("--skip_smape_adapter", action="store_true", default=False, help="Skip standard differentiable SMAPE neural adapter")
     parser.add_argument("--use_modal_tower", action="store_true", default=True, help="Train Modality-Specific Tower Adapter")
     parser.add_argument("--skip_modal_tower", action="store_true", default=False, help="Skip Modal Tower Adapter and only train GBDT/standard adapters")
     parser.add_argument("--modal_tower_epochs", type=int, default=30, help="Epochs for Modal Tower per fold")
@@ -498,8 +499,8 @@ def main():
                 )
                 print(f"\nOverall OOF Modal Tower Adapter SMAPE: {smape(y_train, oof_modal_tower):.2f}%", flush=True)
 
-            # 4b. Standard Neural Pricing Adapter (SMAPE Loss)
-            if not args.use_modal_tower or args.skip_modal_tower:
+            # 4b. Standard Neural Pricing Adapter (Differentiable SMAPE Loss)
+            if not args.skip_smape_adapter:
                 print("\n[4b/5] Training Multimodal Pricing Adapter with Differentiable SMAPE Loss...", flush=True)
                 oof_adapter, test_adapter, adapter_scores = train_adapter_cv(
                     train_text_emb=train_text_emb,
