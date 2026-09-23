@@ -171,4 +171,7 @@ import pandas as pd
 df = pd.read_csv('dataset/test_out.csv')
 print(f'Rows: {len(df)}, Nulls: {df.isnull().sum().sum()}, Min: \${df[\"price\"].min():.2f}, Median: \${df[\"price\"].median():.2f}, Max: \${df[\"price\"].max():.2f}')
 "
+    echo ""
+    echo ">>> To sync this generated submission into git, run:"
+    echo "    git add dataset/test_out.csv && git commit -m 'feat(submission): sync verified Milestone 8 test_out.csv' && git push origin main"
 fi
